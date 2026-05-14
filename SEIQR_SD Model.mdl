@@ -1,0 +1,508 @@
+{UTF-8}
+Reintroduction rate=DELAY FIXED ( quarantine recovery rate+Recovery Rate , (Immunity waning\
+		/3)*(1+BRD Stress), 0 )
+	~	cattle/day
+	~		|
+
+Exposure Rate=Susceptible*Force of infection
+	~	cattle/day
+	~		|
+
+Recovered= INTEG ((quarantine recovery rate+Recovery Rate-Reintroduction rate),
+		0)
+	~	cattle
+	~		~	:SUPPLEMENTARY 
+	|
+
+Susceptible= INTEG (Reintroduction rate-Exposure Rate,
+		init s)
+	~	cattle
+	~		|
+
+Immunity waning=180
+	~	day [0,500]
+	~		|
+
+inital stress=0.025
+	~	Dmnl [0,1]
+	~		|
+
+preconditioning effect=1/(1 + 1.5*preconditioning score)
+	~	Dmnl
+	~		|
+
+Stress Buildup=(age score
+	+ commingling effect
+	+ (preconditioning effect)
+	+ season stress
+	+ transportation stress
+	+ weather stress)/6
+	~	Dmnl
+	~		|
+
+BRD Stress= INTEG (Stress Buildup-Stress Recovery,
+		inital stress)
+	~	Dmnl
+	~		|
+
+transportation stress=((0.9-EXP ( -0.2*("average transit time (hours)") )) + (0.9-EXP\
+		 ( -0.003*("average transport distance (miles)")))) /  2
+	~	Dmnl [0,1]
+	~		|
+
+commingling effect=1 - EXP(-0.15 * contact rate)
+	~	Dmnl [0.001,1,0.001]
+	~		|
+
+Stress Recovery=BRD Stress/stress adaptation time
+	~	Dmnl
+	~		|
+
+stress adaptation time=2
+	~	Dmnl [0,20]
+	~		|
+
+transmission probability=(1+BRD Stress)*(1-vaccination coverage)*infectivity
+	~	Dmnl
+	~		|
+
+preconditioning score=0.4
+	~	Dmnl [0.01,1,0.01]
+	~		|
+
+age score=EXP (-0.08*("average age (months)"-5) )
+	~	Dmnl [0,1]
+	~		|
+
+"average age (months)"=10
+	~	Dmnl [5,12,1]
+	~		|
+
+"average ambient temperature (F)"=70
+	~	Dmnl [-10,120,5]
+	~		|
+
+"average humidity (%)"=45
+	~	Dmnl [35,90,1]
+	~		|
+
+"season (0:winter, 1:summer, 2:spring, 3: fall)"=2
+	~	Dmnl [0,3,1]
+	~		|
+
+"average transit time (hours)"=5
+	~	Dmnl [2,24,1]
+	~		|
+
+"average transport distance (miles)"=250
+	~	Dmnl [50,1000,1]
+	~		|
+
+season stress=0.5 + (0.5* cos (2*3.1415*("season (0:winter, 1:summer, 2:spring, 3: fall)"\
+		 - 3 ) / 4))
+	~	Dmnl [0,1]
+	~		|
+
+weather stress=((ABS ( "average ambient temperature (F)" - 65 )/40 ) + (1-EXP ( -0.02\
+		*("average humidity (%)") ) )) / 2
+	~	Dmnl [0,1]
+	~		|
+
+Infected mortality rate=
+	Infected*fractional mortality
+	~	cattle/day
+	~		|
+
+fractional mortality=0.05
+	~	Dmnl [0,1]
+	~		|
+
+Force of infection=
+	contact rate*transmission probability*(Infected/current population)
+	~	1/day
+	~		|
+
+infectivity=pathogen load
+	~	Dmnl [0,1]
+	~		|
+
+current population=
+	Exposed+Quarantine+Recovered+Susceptible+Infected
+	~	cattle
+	~		|
+
+Infection Rate=(1/Incubation period)*(Exposed)
+	~	cattle/day
+	~		|
+
+Total Deaths=Infected Mortality+Quarantine Deaths
+	~	cattle
+	~		|
+
+Infected Mortality= INTEG (
+	Infected mortality rate,
+		0)
+	~	cattle
+	~		|
+
+Quarantine= INTEG (Quarantine rate-quarantine recovery rate-Quarantine mortality rate\
+		,
+		0)
+	~	cattle
+	~		|
+
+quarantine death rate=0.001
+	~	1/day [0,1]
+	~		|
+
+Quarantine Deaths= INTEG (Quarantine mortality rate,
+		0)
+	~	cattle
+	~		|
+
+Quarantine mortality rate=Quarantine*quarantine death rate
+	~	cattle/day
+	~		|
+
+Infected= INTEG (Infection Rate-Infected mortality rate-Quarantine rate-Recovery Rate\
+		,
+		initial infected)
+	~	cattle
+	~		|
+
+Incubation period=4
+	~	day [0,14]
+	~		|
+
+pathogen load=0.3
+	~	Dmnl [0,1]
+	~		|
+
+init s=initial population-initial infected
+	~	cattle
+	~		|
+
+vaccination coverage=
+	0.4
+	~	Dmnl [0,1]
+	~		|
+
+Exposed= INTEG (Exposure Rate-Infection Rate,
+		0)
+	~	cattle
+	~		|
+
+initial infected=1
+	~	cattle [0,?]
+	~		|
+
+initial population=10000
+	~	cattle [0,?]
+	~		|
+
+quarantine recovery rate=Quarantine/average time to recovery in quarantine
+	~	cattle/day
+	~		|
+
+Recovery Rate=Infected*(1/average infection time)
+	~	cattle/day
+	~		|
+
+cattle sold=50
+	~	head
+	~		~	:SUPPLEMENTARY 
+	|
+
+contact rate=
+	10
+	~	1/day [0,50]
+	~		|
+
+average time to recovery in quarantine=7
+	~	day [0,20]
+	~		|
+
+average infection time=7
+	~	day [0,20]
+	~		|
+
+average time to quarantine=4
+	~	day [0,20]
+	~		|
+
+Quarantine rate=Infected/average time to quarantine
+	~	cattle/day
+	~		|
+
+********************************************************
+	.Control
+********************************************************~
+		Simulation Control Parameters
+	|
+
+FINAL TIME  = 720
+	~	day
+	~	The final time for the simulation.
+	|
+
+INITIAL TIME  = 0
+	~	day
+	~	The initial time for the simulation.
+	|
+
+SAVEPER  = 
+        TIME STEP
+	~	day [0,?]
+	~	The frequency with which output is stored.
+	|
+
+TIME STEP  = 0.125
+	~	day [0,?]
+	~	The time step for the simulation.
+	|
+
+\\\---/// Sketch information - do not modify anything except names
+V300  Do not put anything below this section - it will be ignored
+*View 1
+$-1--1--1,0,|12||-1--1--1|-1--1--1|-1--1--1|-1--1--1|-1--1--1|96,96,76,0
+10,1,Susceptible,-63,341,74,38,3,3,0,62,-1,0,0,0,0-0-0,192-192-192,Times New Roman|20|B|0-0-0,0,0,0,0,0,0
+10,2,Exposed,335,345,54,37,3,3,0,62,-1,0,0,0,0-0-0,192-192-192,Times New Roman|20|B|0-0-0,0,0,0,0,0,0
+10,3,Infected,621,332,56,34,3,3,0,62,-1,0,0,0,0-0-0,192-192-192,Times New Roman|20|B|0-0-0,0,0,0,0,0,0
+10,4,Recovered,1063,328,69,38,3,3,0,62,-1,0,0,0,0-0-0,192-192-192,Times New Roman|20|B|0-0-0,0,0,0,0,0,0
+1,5,7,1,100,0,0,22,0,192,0,-1--1--1,,1|(70,342)|
+1,6,7,2,4,0,0,22,1,192,0,0-0-255,|||0-0-0,1|(211,342)|
+11,7,0,135,342,6,8,34,3,0,2,3,0,0,0,0-0-0,0-0-0,|||0-0-0,0,0,0,0,0,0
+10,8,Exposure Rate,135,316,76,18,40,3,0,58,-1,1,0,0,0-0-0,0-0-0,Times New Roman|14|B|0-0-0,0,0,0,0,0,0
+1,9,11,2,100,0,0,22,1,192,0,0-0-255,|||0-0-0,1|(433,337)|
+1,10,11,3,4,0,0,22,1,192,0,0-0-255,|||0-0-0,1|(527,337)|
+11,11,0,484,337,6,8,34,3,0,2,3,0,0,0,0-0-0,0-0-0,|||0-0-0,0,0,0,0,0,0
+10,12,Infection Rate,484,307,65,22,40,3,0,58,-1,1,0,0,0-0-0,0-0-0,Times New Roman|14|B|0-0-0,0,0,0,0,0,0
+1,13,15,3,100,0,0,22,0,192,0,-1--1--1,,1|(745,340)|
+1,14,15,4,4,0,0,22,0,192,0,-1--1--1,,1|(910,340)|
+11,15,0,820,340,6,8,34,3,0,2,1,0,0,0,0-0-0,0-0-0,|||0-0-0,0,0,0,0,0,0
+10,16,Recovery Rate,820,360,58,12,40,3,0,58,-1,0,0,0,0-0-0,0-0-0,Times New Roman|14|B|0-0-0,0,0,0,0,0,0
+10,17,contact rate,-255,430,56,22,8,3,0,24,-1,1,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,18,infectivity,183,498,51,20,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,19,average infection time,913,264,68,29,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,20,2,12,1,0,0,0,0,192,0,-1--1--1,,1|(413,372)|
+1,21,3,15,1,0,0,0,0,192,0,-1--1--1,,1|(706,308)|
+1,22,19,16,1,0,0,0,0,192,0,-1--1--1,,1|(826,302)|
+10,23,Quarantine,634,118,68,33,3,3,0,62,-1,0,0,0,0-0-0,192-192-192,Times New Roman|20|B|0-0-0,0,0,0,0,0,0
+1,24,26,3,100,0,0,22,0,192,0,-1--1--1,,1|(625,244)|
+1,25,26,23,4,0,0,22,0,192,0,-1--1--1,,1|(625,165)|
+11,26,0,625,185,8,6,33,3,0,0,4,0,0,0,0,0,0,0,0,0
+10,27,Quarantine rate,689,185,56,21,40,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,28,30,23,100,0,0,22,0,192,0,-1--1--1,,1|(766,112)|
+1,29,30,4,4,0,0,22,0,192,0,-1--1--1,,1|(1063,112)|
+11,30,0,839,112,8,6,33,3,0,0,3,0,0,0,0,0,0,0,0,0
+10,31,quarantine recovery rate,839,80,67,26,40,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,32,3,27,1,0,0,0,0,192,0,-1--1--1,,1|(647,242)|
+10,33,average time to quarantine,759,262,64,24,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,34,average time to recovery in quarantine,936,186,70,27,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,35,33,27,0,0,0,0,0,192,0,-1--1--1,,1|(0,0)|
+1,36,34,31,1,0,0,0,0,192,0,-1--1--1,,1|(861,148)|
+10,37,transportation stress,-214,703,79,21,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,38,commingling effect,-252,514,68,18,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,39,age score,-299,560,49,17,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,40,weather stress,-288,674,47,26,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,41,season stress,-101,696,44,21,8,3,0,24,-1,1,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,42,preconditioning score,142,742,78,21,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,43,pathogen load,332,499,45,21,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,44,vaccination coverage,-142,467,56,21,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,45,initial population,305,262,51,29,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,46,initial infected,309,203,42,29,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,47,46,3,1,0,0,0,0,192,1,-1--1--1,,1|(476,241)|
+10,48,init s,77,244,42,22,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,49,46,48,1,0,0,0,0,192,0,-1--1--1,,1|(190,210)|
+1,50,45,48,1,0,0,0,0,192,0,-1--1--1,,1|(184,243)|
+1,51,48,1,1,0,0,0,0,192,1,-1--1--1,,1|(-53,317)|
+10,52,Incubation period,421,409,56,15,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,53,52,11,1,0,0,0,0,192,0,-1--1--1,,1|(475,377)|
+1,54,23,31,0,1,0,0,0,64,0,-1--1--1,,1|(0,0)|
+1,55,23,30,1,0,0,0,0,192,0,-1--1--1,,1|(730,146)|
+10,56,Infected Mortality,624,570,61,32,3,3,0,62,-1,0,0,0,0-0-0,191-191-191,Times New Roman|20|B|0-0-0,0,0,0,0,0,0
+1,57,59,3,100,0,0,22,0,192,0,-1--1--1,,1|(622,410)|
+1,58,59,56,4,0,0,22,0,192,0,-1--1--1,,1|(622,502)|
+11,59,0,622,461,8,6,33,3,0,0,2,0,0,0,0,0,0,0,0,0
+10,60,Infected mortality rate,550,461,64,24,40,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,61,3,59,1,0,0,0,0,192,0,-1--1--1,,1|(592,408)|
+10,62,Force of infection,65,407,43,32,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,63,44,75,1,0,0,0,0,192,0,-1--1--1,,1|(-68,469)|
+1,64,62,7,1,0,0,0,1,192,0,0-0-255,|||0-0-0,1|(88,365)|
+1,65,17,62,0,0,0,0,0,192,0,-1--1--1,,1|(0,0)|
+1,66,18,75,1,0,0,0,0,192,0,-1--1--1,,1|(94,491)|
+10,67,current population,227,408,52,28,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,68,1,67,0,13,0,0,0,64,0,-1--1--1,,1|(0,0)|
+1,69,2,67,0,13,0,0,0,64,0,-1--1--1,,1|(0,0)|
+1,70,23,67,0,13,0,0,0,64,0,-1--1--1,,1|(0,0)|
+1,71,4,67,0,13,0,0,0,64,0,-1--1--1,,1|(0,0)|
+1,72,3,67,0,13,0,0,0,64,0,-1--1--1,,1|(0,0)|
+1,73,43,18,0,0,0,0,0,192,0,-1--1--1,,1|(0,0)|
+1,74,1,7,1,0,0,0,0,192,0,-1--1--1,,1|(34,314)|
+10,75,transmission probability,0,511,62,23,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,76,75,62,0,0,0,0,0,192,0,-1--1--1,,1|(0,0)|
+1,77,67,62,0,0,0,0,0,192,0,-1--1--1,,1|(0,0)|
+1,78,3,62,1,0,0,0,1,192,0,0-0-255,|||0-0-0,1|(408,452)|
+10,79,quarantine death rate,795,53,44,18,8,2,1,3,-1,0,0,0,128-128-128,0-0-0,|||128-128-128,0,0,0,0,0,0
+10,80,Quarantine mortality rate,771,178,52,18,8,2,1,3,-1,0,0,0,128-128-128,0-0-0,|||128-128-128,0,0,0,0,0,0
+1,81,80,23,0,1,0,0,0,64,0,-1--1--1,,1|(0,0)|
+10,82,fractional mortality,492,527,53,24,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,83,82,59,1,0,0,0,0,192,0,-1--1--1,,1|(545,485)|
+10,84,"average age (months)",-437,564,63,29,8,3,0,26,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,85,"average transport distance (miles)",-172,778,70,25,8,3,0,26,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,86,"average transit time (hours)",-300,778,71,26,8,3,0,26,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,87,"average ambient temperature (F)",-414,728,73,26,8,3,0,26,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,88,"average humidity (%)",-431,638,63,26,8,3,0,26,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,89,"season (0:winter, 1:summer, 2:spring, 3: fall)",13,791,101,25,8,3,0,26,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,90,86,37,1,0,0,0,0,64,0,-1--1--1,,1|(-289,728)|
+1,91,85,37,1,0,0,0,0,64,0,-1--1--1,,1|(-217,758)|
+1,92,89,41,1,0,0,0,0,64,0,-1--1--1,,1|(-58,782)|
+1,93,84,39,1,0,0,0,0,64,0,-1--1--1,,1|(-339,543)|
+1,94,88,40,1,0,0,0,0,64,0,-1--1--1,,1|(-345,636)|
+1,95,87,40,1,0,0,0,0,64,0,-1--1--1,,1|(-359,680)|
+10,96,BRD Stress,38,603,55,30,3,3,0,62,-1,0,0,0,0-0-0,191-191-191,Times New Roman|20|B|0-0-0,0,0,0,0,0,0
+12,97,48,-225,600,10,8,0,3,0,0,-1,0,0,0,0,0,0,0,0,0
+1,98,100,97,100,0,0,22,0,192,0,-1--1--1,,1|(-165,600)|
+1,99,100,96,4,0,0,22,0,192,0,-1--1--1,,1|(-60,600)|
+11,100,0,-109,600,6,8,34,3,0,0,1,0,0,0,0,0,0,0,0,0
+10,101,Stress Buildup,-109,634,46,26,40,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+12,102,48,278,600,10,8,0,3,0,0,-1,0,0,0,0,0,0,0,0,0
+1,103,105,96,100,0,0,22,0,192,0,-1--1--1,,1|(132,600)|
+1,104,105,102,4,0,0,22,0,192,0,-1--1--1,,1|(226,600)|
+11,105,0,178,600,6,8,34,3,0,0,1,0,0,0,0,0,0,0,0,0
+10,106,Stress Recovery,178,634,46,26,40,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,107,stress adaptation time,286,687,59,26,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,108,107,105,1,0,0,0,0,192,0,-1--1--1,,1|(267,651)|
+1,109,96,105,1,0,0,0,0,192,0,-1--1--1,,1|(118,562)|
+1,110,37,100,1,0,0,0,0,192,0,-1--1--1,,1|(-185,634)|
+1,111,38,100,1,0,0,0,0,192,0,-1--1--1,,1|(-165,556)|
+1,112,40,100,1,0,0,0,0,192,0,-1--1--1,,1|(-194,624)|
+1,113,17,38,1,0,0,0,0,192,0,-1--1--1,,1|(-274,470)|
+10,114,inital stress,144,693,46,26,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,115,114,96,0,0,0,0,0,192,1,-1--1--1,,1|(0,0)|
+10,116,preconditioning effect,-3,678,58,26,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+1,117,42,116,1,0,0,0,0,192,0,-1--1--1,,1|(85,747)|
+1,118,116,100,1,0,0,0,0,192,0,-1--1--1,,1|(-52,637)|
+1,119,41,100,1,0,0,0,0,192,0,-1--1--1,,1|(-160,648)|
+1,120,39,100,1,0,0,0,0,192,0,-1--1--1,,1|(-186,572)|
+1,121,96,75,1,0,0,0,0,192,0,-1--1--1,,1|(8,580)|
+12,122,48,-333,340,10,8,0,3,0,0,-1,0,0,0,0,0,0,0,0,0
+1,123,125,122,100,0,0,22,0,192,0,-1--1--1,,1|(-285,340)|
+1,124,125,1,4,0,0,22,0,192,0,-1--1--1,,1|(-186,340)|
+11,125,0,-241,340,6,8,34,3,0,0,1,0,0,0,0,0,0,0,0,0
+10,126,Reintroduction rate,-241,374,46,26,40,3,0,0,-1,0,0,0,0,0,0,0,0,0
+10,127,Immunity waning,-162,288,46,26,8,3,0,0,-1,0,0,0,0,0,0,0,0,0
+1,128,127,125,0,0,0,0,0,192,0,-1--1--1,,1|(0,0)|
+10,129,Reintroduction rate,1163,257,42,13,8,2,0,3,-1,0,0,0,128-128-128,0-0-0,|||128-128-128,0,0,0,0,0,0
+10,130,Recovery Rate,-245,232,45,13,8,2,0,3,-1,0,0,0,128-128-128,0-0-0,|||128-128-128,0,0,0,0,0,0
+10,131,quarantine recovery rate,-304,278,56,20,8,2,0,3,-1,0,0,0,128-128-128,0-0-0,|||128-128-128,0,0,0,0,0,0
+10,132,BRD Stress,-144,222,38,13,8,2,0,3,-1,0,0,0,128-128-128,0-0-0,|||128-128-128,0,0,0,0,0,0
+1,133,129,4,0,0,0,0,0,192,0,-1--1--1,,1|(0,0)|
+10,134,Recovered,-353,227,37,13,8,2,0,3,-1,0,0,0,128-128-128,0-0-0,|||128-128-128,0,0,0,0,0,0
+1,135,131,125,0,0,0,0,0,192,0,-1--1--1,,1|(0,0)|
+1,136,130,125,0,0,0,0,0,192,0,-1--1--1,,1|(0,0)|
+12,137,0,1227,666,463,271,8,15,0,0,1,0,0,0,0,0,0,0,0,0
+SEIRQ
+1,138,132,125,0,0,0,0,0,192,0,-1--1--1,,1|(0,0)|
+10,139,Time,-116,171,24,13,8,2,0,3,-1,0,0,0,128-128-128,0-0-0,|||128-128-128,0,0,0,0,0,0
+\\\---/// Sketch information - do not modify anything except names
+V300  Do not put anything below this section - it will be ignored
+*View 2
+$-1--1--1,0,|12||-1--1--1|-1--1--1|-1--1--1|-1--1--1|-1--1--1|96,96,100,0
+\\\---/// Sketch information - do not modify anything except names
+V300  Do not put anything below this section - it will be ignored
+*View 3
+$-1--1--1,0,|12||-1--1--1|-1--1--1|-1--1--1|-1--1--1|-1--1--1|96,96,100,0
+///---\\\
+:GRAPH Antimicrobial_Use
+:TITLE Antimicrobial Use
+:X-AXIS Time
+:SCALE
+:VAR Cumulative antimicrobial usage
+:DATASET 
+:LINE-COLOR 255-0-128
+:LINE-WIDTH 3
+:SCALE
+:VAR Metaphylactic usage
+:DATASET 
+:LINE-COLOR 0-255-0
+:LINE-WIDTH 2
+:SCALE
+:VAR Therapeutic usage
+:DATASET 
+:LINE-WIDTH 2
+
+:GRAPH Economic_Outcomes
+:TITLE Economic Outcomes
+:SCALE
+:VAR Profit
+:DATASET 
+:LINE-WIDTH 3
+:SCALE
+:VAR Herd Revenue
+:DATASET 
+:LINE-COLOR 0-255-0
+:LINE-WIDTH 2
+:SCALE
+:VAR Total Production Loss
+:DATASET 
+:LINE-COLOR 255-0-0
+:LINE-WIDTH 2
+:SCALE
+:VAR Healthcare cost
+:DATASET 
+:LINE-COLOR 0-255-255
+:LINE-WIDTH 2
+
+:GRAPH SEIRQ
+:TITLE SEIRQ
+:SCALE
+:VAR Susceptible
+:DATASET 
+:LINE-WIDTH 1
+:VAR Infected
+:DATASET 
+:LINE-WIDTH 2
+:VAR Exposed
+:DATASET 
+:LINE-WIDTH 2
+:VAR Quarantine
+:DATASET 
+:LINE-WIDTH 2
+:VAR Recovered
+:DATASET 
+:LINE-WIDTH 2
+:L<%^E!@
+1:current.vdfx
+1:.vdfx
+4:Time
+5:"season (0:winter, 1:summer, 2:spring, 3: fall)"
+9:current
+19:76,0
+24:0
+25:720
+26:720
+23:0
+15:0,0,0,0,0,0
+27:0,
+34:0,
+42:0
+72:0
+73:0
+95:0
+96:0
+97:0
+77:0
+78:0
+102:1
+93:0
+94:0
+92:0
+91:0
+90:0
+87:0
+75:
+43:
+103:8,8,8,3,8
+105:0,0,0,0,0,0,0,0,0,0
+104:Vensim Sans|12||0-0-0|0-0-0|-1--1--1|0-0-255|192-192-192|-1--1--1

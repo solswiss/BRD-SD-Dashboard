@@ -4,8 +4,8 @@ import pandas as pd
 import numpy as np
 
 
-st.title("SEIQR_linked Dashboard")
 st.set_page_config(layout='wide')
+st.title("SEIQR_linked Dashboard")
 
 def reset():
     st.cache_resource.clear()

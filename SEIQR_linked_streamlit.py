@@ -161,7 +161,9 @@ schema = service.get_parameter_schema()
 doc = service.get_doc()
 views = build_view_options(schema, doc)
 stocks = list(service.get_stocks())
-
+# session state
+if 'simulations' not in st.session_state:
+    st.session_state.simulations = {}
 
 # sidebar
 collected_stocks = {}
@@ -176,6 +178,10 @@ def reset():
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.rerun()
+def save_simulation():
+    st.session_state.simulations[st.session_state.sim_title] = {}
+def load_simulation():
+    pass
 with st.sidebar:
     st.header('Initial State')    
 
@@ -189,6 +195,12 @@ with st.sidebar:
     with c:
         time_step = st.number_input('Time step',0.0,float(final_time),schema['time_step'].get('default'))
     if st.button('Reset'): reset()
+
+    st.subheader('Simulation')
+    sim_title = st.text_input('Simulation title', key='simulation_title')
+    if st.button('Save'): save_simulation()
+    selected_sim = st.selectbox('Load simulation', st.session_state.simulations.keys(), key='selected_simulation')
+    if st.button('Load'): load_simulation()
 
     st.subheader('Stocks')
     collected_stocks.update(render_number_inputs(schema, stocks, True))
@@ -249,3 +261,7 @@ with display:
         pct_change = dfi.pct_change()
 
         st.metric(f'Cattle population by day {final_time}', int(final_value), int(final_value-initial_value), chart_data=dfi, height='stretch', width='stretch', delta_description=f'since day {initial_time}')
+
+
+st.markdown()
+st.dataframe(results_df[['AMU Rate','fractional AMU rate 1','fractional AMU rate 2','Metaphylactic usage','Therapeutic usage']])

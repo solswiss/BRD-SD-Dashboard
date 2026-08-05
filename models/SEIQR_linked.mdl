@@ -21,7 +21,7 @@ AMU Rate=
 	~		|
 
 Production Cost=
-	Healthcare cost+"Non-Healthcare cost"
+	Healthcare cost+Non healthcare cost
 	~	USD
 	~		|
 
@@ -62,13 +62,13 @@ unit cost of vaccine=
 	~	USD [0,50]
 	~		|
 
-"Unit non-healthcare cost"=
+Unit non healthcare cost=
 	1000
 	~	USD/cattle [500,2000,200]
 	~		|
 
 loss rate=
-	"Steer/Heifer Value"*(ADG reduction loss+mortality loss)*opportunity cost
+	Steer heifer value*(ADG reduction loss+mortality loss)*opportunity cost
 	~	
 	~		|
 
@@ -79,7 +79,7 @@ Metaphylactic usage= INTEG (
 	~		|
 
 Revenue rate=
-	Recovered*"Steer/Heifer Value"
+	Recovered*Steer heifer value
 	~	USD
 	~		|
 
@@ -141,8 +141,8 @@ mortality loss=
 	~	cattle
 	~		|
 
-"Non-Healthcare cost"=
-	"Unit non-healthcare cost"*current population
+Non healthcare cost=
+	Unit non healthcare cost*current population
 	~	USD
 	~		|
 
@@ -166,7 +166,7 @@ Usage frequency M=
 	~	day [0,10,2]
 	~		|
 
-"Steer/Heifer Value"=
+Steer heifer value=
 	2500
 	~	USD [1000,4000,500]
 	~		|
@@ -527,7 +527,7 @@ SEIQR
 10,137,opportunity cost,1278,956,75,26,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
 10,138,Healthcare cost,1774,825,60,26,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
 10,139,Vaccination cost,1909,739,59,26,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
-10,140,"Steer/Heifer Value",1439,999,71,26,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,140,Steer heifer value,1439,999,71,26,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
 10,141,Profit,1937,1059,45,39,3,3,0,62,-1,0,0,0,0-0-0,255-128-192,Times New Roman|20|B|0-0-0,0,0,0,0,0,0
 10,142,Herd Revenue,1675,901,60,40,3,3,0,62,-1,0,0,0,0-0-0,255-128-192,Times New Roman|20|B|0-0-0,0,0,0,0,0,0
 10,143,Total Production Loss,1515,1113,63,50,3,3,0,62,-1,0,0,0,0-0-0,255-128-192,Times New Roman|20|B|0-0-0,0,0,0,0,0,0
@@ -551,7 +551,7 @@ SEIQR
 1,161,63,134,1,0,0,0,0,192,0,-1--1--1,,1|(1066,1078)|
 10,162,Unit cost of metaphylactic AMU,1580,644,76,35,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
 1,163,139,138,1,0,0,0,0,192,0,-1--1--1,,1|(1873,784)|
-10,164,"Non-Healthcare cost",1960,826,80,22,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,164,Non healthcare cost,1960,826,80,22,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
 1,165,135,136,1,0,0,0,0,192,0,-1--1--1,,1|(1154,969)|
 1,166,136,157,1,0,0,0,0,192,0,-1--1--1,,1|(1265,1086)|
 1,167,140,157,1,0,0,0,0,192,0,-1--1--1,,1|(1372,1049)|
@@ -580,7 +580,7 @@ SEIQR
 1,190,187,147,1,0,0,0,0,192,0,-1--1--1,,1|(1825,992)|
 10,191,fractional profitability rate,1620,989,77,29,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
 1,192,191,147,1,0,0,0,0,192,0,-1--1--1,,1|(1738,1012)|
-10,193,"Unit non-healthcare cost",2082,723,88,30,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
+10,193,Unit non healthcare cost,2082,723,88,30,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0
 1,194,173,164,1,0,0,0,0,192,0,-1--1--1,,1|(1983,723)|
 1,195,193,164,1,0,0,0,0,192,0,-1--1--1,,1|(2018,756)|
 10,196,treatment dosage,716,580,57,21,8,3,0,24,-1,0,0,0,0-0-0,0-0-0,|14|B|0-0-0,0,0,0,0,0,0

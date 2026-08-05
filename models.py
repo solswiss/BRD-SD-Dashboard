@@ -24,7 +24,7 @@ class SEIQRModelService:
             self.doc['Limits'].apply(lambda x: isinstance(x, (tuple, list)) and not (np.isnan(x[0]) and np.isnan(x[1])))
         ]
         
-        for _, row in self.doc.iterrows():#limits_df.iterrows():
+        for _, row in self.doc.iterrows():
             py_name = row['Py Name']
             # Safely fetch current component default value
             try:

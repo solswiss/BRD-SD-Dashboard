@@ -1,0 +1,56 @@
+{
+  "Epidemiology":{
+    "force_of_infection": {
+      "label": "Force of Infection",
+      "showDelta": true,
+      "threshold": { "warning": 0.5, "critical": 1.0 }
+    },
+    "mortality_loss": {
+      "label": "Mortality Loss",
+      "showDelta": true
+    },
+    "contact_rate": {
+      "label": "Contact Rate",
+      "showDelta": false
+    },
+    "fractional_mortality": {
+      "label": "Fractional Mortality",
+      "showDelta": false
+    }
+  },
+  "Antimicrobial Usage": {
+    "cumulative_antimicrobial_usage": {
+      "label": "Cumulative Antimicrobial Usage",
+      "showDelta": true
+    },
+    "metaphylactic_usage": {
+      "label": "Metaphylactic Usage",
+      "showDelta": true
+    },
+    "therapeutic_usage": {
+      "label": "Therapeutic Usage",
+      "showDelta": true
+    }
+  },
+  "Economics": {
+    "herd_revenue": {
+      "label": "Herd Revenue",
+      "showDelta": true
+    },
+    "production_cost": {
+      "label": "Production Cost",
+      "showDelta": true
+    },
+    "profit": {
+      "label": "Profit",
+      "showDelta": true,
+      "threshold": { "warning": 0, "critical": -1000 }
+    }
+  },
+"Risk Factors": {
+    "risk_factor_score": {
+      "label": "Risk Factor Score",
+      "showDelta": false
+    }
+  }
+}

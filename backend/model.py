@@ -156,20 +156,23 @@ def amu_rate():
     units="USD",
     comp_type="Auxiliary",
     comp_subtype="Normal",
-    depends_on={"healthcare_cost": 1, "nonhealthcare_cost": 1},
+    depends_on={"healthcare_cost": 1, "non_healthcare_cost": 1},
 )
 def production_cost():
-    return healthcare_cost() + nonhealthcare_cost()
+    """Total cost of production."""
+    return healthcare_cost() + non_healthcare_cost()
 
 
 @component.add(
     name="Profit",
+    units="USD",
     comp_type="Stateful",
     comp_subtype="Integ",
     depends_on={"_integ_profit": 1},
     other_deps={"_integ_profit": {"initial": {}, "step": {"profitability_rate": 1}}},
 )
 def profit():
+    """Net profit."""
     return _integ_profit()
 
 
@@ -243,6 +246,7 @@ def unit_cost_of_metaphylactic_amu():
     },
 )
 def cumulative_antimicrobial_usage():
+    """Total antimicrobials administered over time."""
     return _integ_cumulative_antimicrobial_usage()
 
 
@@ -263,13 +267,13 @@ def unit_cost_of_vaccine():
 
 
 @component.add(
-    name='"Unit non-healthcare cost"',
+    name="Unit non healthcare cost",
     units="USD/cattle",
     limits=(500.0, 2000.0, 200.0),
     comp_type="Constant",
     comp_subtype="Normal",
 )
-def unit_nonhealthcare_cost():
+def unit_non_healthcare_cost():
     return 1000
 
 
@@ -278,15 +282,15 @@ def unit_nonhealthcare_cost():
     comp_type="Auxiliary",
     comp_subtype="Normal",
     depends_on={
-        "steerheifer_value": 1,
-        "adg_reduction_loss": 1,
+        "steer_heifer_value": 1,
         "mortality_loss": 1,
+        "adg_reduction_loss": 1,
         "opportunity_cost": 1,
     },
 )
 def loss_rate():
     return (
-        steerheifer_value()
+        steer_heifer_value()
         * (adg_reduction_loss() + mortality_loss())
         * opportunity_cost()
     )
@@ -306,6 +310,7 @@ def loss_rate():
     },
 )
 def metaphylactic_usage():
+    """Preventive antimicrobial administration."""
     return _integ_metaphylactic_usage()
 
 
@@ -321,10 +326,10 @@ _integ_metaphylactic_usage = Integ(
     units="USD",
     comp_type="Auxiliary",
     comp_subtype="Normal",
-    depends_on={"recovered": 1, "steerheifer_value": 1},
+    depends_on={"recovered": 1, "steer_heifer_value": 1},
 )
 def revenue_rate():
-    return recovered() * steerheifer_value()
+    return recovered() * steer_heifer_value()
 
 
 @component.add(
@@ -384,6 +389,7 @@ def fractional_profitability_rate():
     },
 )
 def therapeutic_usage():
+    """Treatment antimicrobial administration."""
     return _integ_therapeutic_usage()
 
 
@@ -403,6 +409,7 @@ _integ_therapeutic_usage = Integ(
     other_deps={"_integ_herd_revenue": {"initial": {}, "step": {"revenue_rate": 1}}},
 )
 def herd_revenue():
+    """Total revenue from herd production."""
     return _integ_herd_revenue()
 
 
@@ -469,18 +476,19 @@ def treatment_dosage():
     depends_on={"infected_mortality": 1},
 )
 def mortality_loss():
+    """Cumulative mortality attributable to infection."""
     return infected_mortality()
 
 
 @component.add(
-    name='"Non-Healthcare cost"',
+    name="Non healthcare cost",
     units="USD",
     comp_type="Auxiliary",
     comp_subtype="Normal",
-    depends_on={"unit_nonhealthcare_cost": 1, "current_population": 1},
+    depends_on={"unit_non_healthcare_cost": 1, "current_population": 1},
 )
-def nonhealthcare_cost():
-    return unit_nonhealthcare_cost() * current_population()
+def non_healthcare_cost():
+    return unit_non_healthcare_cost() * current_population()
 
 
 @component.add(
@@ -539,13 +547,13 @@ def usage_frequency_m():
 
 
 @component.add(
-    name='"Steer/Heifer Value"',
+    name="Steer heifer value",
     units="USD",
     limits=(1000.0, 4000.0, 500.0),
     comp_type="Constant",
     comp_subtype="Normal",
 )
-def steerheifer_value():
+def steer_heifer_value():
     return 2500
 
 
@@ -586,6 +594,7 @@ def transmission_probability():
     },
 )
 def force_of_infection():
+    """Rate at which susceptible animals acquire infection."""
     return (
         contact_rate()
         * transmission_probability()
@@ -648,6 +657,7 @@ def current_population():
     },
 )
 def risk_factor_score():
+    """Composite risk assessment based on epidemiological and economic factors."""
     return (
         age_score()
         + commingling_score()
@@ -1036,6 +1046,7 @@ def weather_score():
     comp_subtype="Normal",
 )
 def contact_rate():
+    """Contact frequency in herd."""
     return 10
 
 

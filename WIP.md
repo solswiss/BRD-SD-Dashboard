@@ -2,44 +2,73 @@
 These are testing grounds! End goal is (learn how to develop) a functional HTML dashboard for the model. Everything tested here is a step toward developing an HTML dashboard (drawing inspiration from [En-ROADS](https://en-roads.climateinteractive.org/scenario.html?v=26.7.0)) for the final model(s).  
 
 ## Run the dashboard
+### Backend tasks
+0. CD into `backend`
+```
+cd backend
+```
 1. Install required packages
 ```
 pip install requirements.txt
 ```
-2. Run the Streamlit app
+2. Start the server
 ```
-streamlit run SEIQR_linked_streamlit.py
+python app.py
 ```
+### Frontend tasks
+0. CD into `frontend`
+```
+cd frontend
+```
+1. Install required packages
+```
+npm install
+```
+2. Start the client
+```
+npm run dev
+```
+3. Open the dashboard: `ctrl-click` the link or go to `http://localhost:5173`
 
 ## TODO
 ### Current Task Overview
-Review units and input aggregation. Implement most important functionality in Streamlit and migrate to HTML. 
+Complete core functionality tasks.
 
 ### 1. Core Functionality
-- [x] Link constant inputs to graphs
-- [x] Graph selection
-- [x] Build useful dict
-- [ ] Save/load models
-- [ ] [Add necessary features](##Discussion)
-- [x] Add initial state controls
-- [x] Work on `TODO` comments
+- [x] Save/load scenarios
+- [x] Globals
+- [x] Graph view selection
+- [x] KPIs
+- [ ] Sensitivity Analysis
+- [ ] Scenario Testing
 
 ### 2. Frontend
 - [ ] Harmonize UI language
-- [ ] Determine graph scales
+- [ ] Consolidate repeating styles, e.g. font sizes (16px) and colors
+- [ ] Causal input nesting
 
 ### 3. Testing & QA
 - [ ] Test inputs
+    - [ ] Why is antimicrobial use disproportionately large?
 - [ ] Verify cross-browser/device compatibility
+
+### 4. Technical Polish
+- [ ] Implement caches
+- [ ] Restructure and spread code
+- [ ] Enforce types and other checks
+- [ ] Verbose error handling
+- [ ] Add comments
+- [ ] Tidy up code
+
+### 5. Production Readiness
+- [ ] Write README.md for user setup and custom config
 
 ## Technical Notes
 Nothing for now.
 
 ## Discussion
 ### Blockers
-- [ ] Waiting on feedback
 - [ ] (minor) Missing descriptions for input
+    - [ ] Check existing descriptions (Comment)
 ### Questions
-- [ ] Which inputs are expected and at what level of aggregation and or in which, if any, groups?
-- [ ] Should lines scale relative to itself or the largest scale i.e. graph?
-- [ ] Additions to necessary features?
+Nothing for now.

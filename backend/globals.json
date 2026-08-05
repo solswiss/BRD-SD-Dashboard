@@ -1,0 +1,10 @@
+
+{
+    "variables": [
+        "initial_time",
+        "final_time",
+        "time_step",
+        "init_s",
+        "initial_infected"
+    ]
+}

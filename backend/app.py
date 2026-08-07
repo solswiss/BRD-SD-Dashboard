@@ -29,7 +29,7 @@ def init():
         except:
             default = float(row['Limits'][0])
 
-        units = row['Units'] if pd.notna(row['Units']) else "UNDEF"
+        units = (row['Units'] if row['Units'] != '1/day' else '/day') if pd.notna(row['Units']) else "UNDEF"
 
         min = float(row['Limits'][0])
         max = float(row['Limits'][1])
@@ -153,7 +153,7 @@ def get_kpi_plots():
             value = value,
             title = {'text':v['label'], 'font':{'size':KPI_TITLE_SIZE}},
             delta = {'reference':init_value, 'font':{'size':KPI_VALUE_SIZE}},
-            number = {'suffix':all_variables[k]['units'], 'font':{'size':KPI_VALUE_SIZE}},
+            number = {'suffix':' '+all_variables[k]['units'], 'font':{'size':KPI_VALUE_SIZE}},
             domain = {'row':i},
             align='center',
             #gauge = {'axis': {'range': [threshold[0], threshold[1]]}} if threshold else None

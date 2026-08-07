@@ -3,6 +3,7 @@
   import colors from '../colors.json';
   import charts from '../charts.json';
   import Input from '../components/Input.svelte'
+  import MultiSelect from 'svelte-multiselect'
 
   // populated by Flask backend
   let globals = $state({});
@@ -16,10 +17,12 @@
   let inputs = $state({ "initial_time": 0, "final_time": 60 , "time_step": 0.0625})
   let simulationResults = $state({});
   let errorMessage = $state("");
-  let show_scenario_modal = $state(false);
+  let showScenarioModal = $state(false);
+  let inputScenarioName = $state('10A')
   let ephScenario = $state(SCENARIO_ALPHA_NAME)
   let scenarios = {[SCENARIO_ALPHA_NAME]: {'controls': {}, 'inputs': {}}};
-  let scenario = $state(Object.keys(scenarios)[0]);
+  let scenario = $state(SCENARIO_ALPHA_NAME);
+  let selectedScenarios = $state([SCENARIO_ALPHA_NAME])
   let kpiGroups = $state([])
   let activeKpiGroup = $state('Epidemiology');
   let isLoading = $state(false);
@@ -30,8 +33,10 @@
   let Plotly;
 
   $effect(() => {
-    // let ephin = $state.snapshot(inputs)
-    // scenarios[scenario]['inputs'] = ephin
+    let ephin = $state.snapshot(inputs)
+    scenarios[scenario]['inputs'] = ephin
+    console.log(selectedScenarios)
+    if (selectedScenarios.length === 0) selectedScenarios = [SCENARIO_ALPHA_NAME]
     // console.log('ephemereal',inputs['fractional_profitability_rate'])
     // for (const [k,v] of Object.entries(scenarios)) {
     //   try {
@@ -178,8 +183,58 @@
 
   async function loadScenario() {
     inputs = scenarios[scenario]['inputs']
-    //console.log("loaded scenario",scenario,inputs);
-    await runSimulation();
+    await runSimulation()
+  }
+  
+  async function deleteScenario() {
+    if (ephScenario === SCENARIO_ALPHA_NAME) {
+      errorMessage = "Don't delete the Baseline scenario!"
+      console.log("Don't do it.")
+      return
+    }
+    if (scenario === ephScenario) {
+      scenario = SCENARIO_ALPHA_NAME
+      ephScenario = scenario
+      inputs = scenarios[scenario]['inputs']
+      await runSimulation()
+    }
+    delete scenarios[ephScenario]
+  }
+
+  async function importScenario(event) {
+    const file = event.target.files[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      scenarios[inputScenarioName] = {
+        'controls': {
+          'initial_time': inputs['initial_time'],
+          'final_time': inputs['final_time'],
+          'time_step': inputs['time_step'],
+        },
+        'inputs': data,
+      }
+      await runSimulation()
+      await renderChart()
+      scenario = inputScenarioName
+      ephScenario = scenario
+    } catch {
+      errorMessage = "Failed to import scenario"
+      console.log('Failed to import scenario')
+    }
+    ephImportFile = null
+  }
+
+  function exportScenario() {
+    const pretty = JSON.stringify(inputs, null, 2)
+    const blob = new Blob([pretty], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "testdata.json"//`${scenario}_params.json`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   async function getUnits(pyName) {
@@ -200,32 +255,41 @@
     }
   }
 
-  function build_trace(key, xData, vars, targetTracks) {
+  function build_trace(key, xData, vars, targetTracks, colors, lineType) {
     // Filter and build traces only if keys exist in your model run data
-    return targetTracks
+    try {
+      return targetTracks
       .filter(track => vars[track.key] !== undefined)
-      .map(track => ({
+      .map((track, i) => ({
         x: xData,
         y: vars[track.key],
         type: 'scatter',
         mode: 'lines',
         name: `${key}: ${track.name}`,
-        line: { color: track.color, width: 2.5 },
+        line: { dash: lineType, color: track.color, width: 2.5 },
         legendgroup: SCENARIO_ALPHA_NAME,
-        showlegend: false
+        showlegend: false,
+        marker: { color: colors ? colors[i] : null }
       }))
+    } catch (err) {
+      console.error(`While building a trace for ${key}:`,err)
+    }
   }
 
   async function renderChart() {
     if (!Plotly || Object.keys(simulationResults[SCENARIO_ALPHA_NAME]).length === 0) return;
-    //let n = Object.keys(scenarios).length
-    const colorScheme = colors.scheme
     const chartValues = charts[chart]
-    const targetTracks = chartValues.map((e, i) => ({key: e, name: e, color: colorScheme[i]}));
+    const targetTracks = chartValues.map((e) => ({key: e, name: e}));
+    let colorScheme = colors.scheme
+    const tracksLength = targetTracks.length
+    const colorsOverflow = (colorScheme.length / tracksLength) >= Object.keys(scenarios).length
+    const colorsUnderflow = colorScheme.length < tracksLength
     let traces = []
-    for (const k of Object.keys(scenarios)) {
-      //console.log(k,scenarios[k]['inputs']['fractional_profitability_rate'])
-      traces.push(...build_trace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks))
+    let lineTypes = ['solid', 'dashdot', 'dot']
+    for (const [i,k] of Object.keys(scenarios).filter(k => selectedScenarios.includes(k)).entries()) {
+      if (colorsUnderflow) traces.push(...build_trace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, lineTypes[i%tracksLength]))
+      else if (colorsOverflow) traces.push(...build_trace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, colorScheme.slice(i*tracksLength, tracksLength), lineTypes[i%tracksLength]))
+      else traces.push(...build_trace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, colorScheme, lineTypes[i%tracksLength]))
     }
     if (traces.length === 0) {
       errorMessage = "Warning: None of the target plotting variables were found in the model output keys. Check spelling.";
@@ -266,20 +330,30 @@
   </div>
   <br>
   <div class="nav-options-wrapper">
-    <button onclick={() => show_scenario_modal=true}>Scenario Testing</button>
-    <button onclick={() => show_scenario_modal=true}>Sensitivity Testing</button>
+    <button onclick={() => showScenarioModal=true}>Scenario Testing</button>
+    <button onclick={() => showScenarioModal=true}>Sensitivity Testing</button>
   </div>
 </nav>
-{#if show_scenario_modal}
+{#if showScenarioModal}
 <div class="overlay"></div>
 <div class="modal">
   <div class="modal-title">
     <span>Scenario Testing</span>
-    <button class="close" onclick={() => show_scenario_modal=false}>close</button>
+    <button class="close" onclick={() => showScenarioModal=false}>close</button>
   </div>
-  choose scenarios to compare
-  remove, rename, import scenarios (validation)
-  AI LLM analysis
+  <!-- <MultiSelect id="scenario-testing-select" class="input-scenario" options={Object.keys(scenarios)} placeholder="Select a scenario" bind:selected={selectedScenarios}/> -->
+  <label for="scenario-testing-select">Choose scenarios to compare (hold Ctrl/Cmd)</label>
+  <select id="scenario-testing-select" onchange={renderChart} multiple bind:value={selectedScenarios}>
+    {#each Object.keys(scenarios) as s}
+      <option value={s}>{s}</option>
+    {/each}
+  </select>
+  todo: AI LLM analysis
+  <div>
+    <input type="file" accept=".json">
+    <input class="input-scenario" type="text" bind:value={inputScenarioName}>
+    <button onclick={importScenario}>Import</button>
+  </div>
 </div>
 {/if}
 <main class="main">  
@@ -318,13 +392,16 @@
       <div class="scenario-buttons">
         <button onclick={createScenario}>Save as</button>
         <button onclick={loadScenario}>Load</button>
+        <button onclick={exportScenario}>Export</button>
+        <button onclick={deleteScenario}>Delete</button>
       </div>
-      <input id="input-scenario" type="text" bind:value={ephScenario} list="select-scenario" placeholder="Select a scenario"/>
-      <datalist id="select-scenario">
+      <input class="input-scenario" type="text" bind:value={ephScenario} list="select-scenario" placeholder="Select a scenario"/>
+      <datalist>
         {#each Object.keys(scenarios) as scenario}
           <option value="{scenario}">{scenario}</option>
         {/each}
       </datalist>
+      <span class="italics detail-text">Working scenario: {scenario}</span>
     </div>
 
   </section>
@@ -387,7 +464,7 @@
       line-height: 1;
       font-size: .8rem;
     }
-    select, #input-scenario {
+    select, .input-scenario {
       height: min-content;
       width: 20ch;
       font-size: 14px;
@@ -408,7 +485,7 @@
     border: 2px solid #e2e8f0; 
     border-radius: 0; 
     cursor: pointer; 
-    font-size: 1rem; 
+    font-size: .8rem; 
     transition: background 0.2s; 
   }
   button:hover:not(:disabled) { 
@@ -424,6 +501,15 @@
     right: 12px;
   }
 
+  .italics {
+    font-style: italic;
+  }
+  .detail-text {
+    font-size: .6rem;
+    color: #333;
+    line-height: 1;
+  }
+  
   .error { 
     color: #e22; 
     background: #fff; 

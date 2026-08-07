@@ -41,7 +41,8 @@ Complete core functionality tasks.
 - [x] KPIs
 - [ ] Sensitivity Analysis
 - [ ] Scenario Testing
-    - [ ] disable delete baseline scenario, used as defaults
+    - [x] disable delete baseline scenario, used as defaults
+    - [ ] warn delete
 
 ### 2. Frontend
 - [ ] Harmonize UI language
@@ -66,6 +67,9 @@ Complete core functionality tasks.
 
 ## Technical Notes
 Nothing for now.
+
+## Other Notes
+Sourced `colors.json` scheme from [sashamaps](https://sashamaps.net/docs/resources/20-colors/)
 
 ## Discussion
 ### Blockers

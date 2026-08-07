@@ -4,7 +4,7 @@
         "initial_time",
         "final_time",
         "time_step",
-        "init_s",
+        "initial_population",
         "initial_infected"
     ]
 }

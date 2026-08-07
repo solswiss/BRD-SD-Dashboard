@@ -66,7 +66,8 @@ Complete core functionality tasks.
 - [ ] Write README.md for user setup and custom config
 
 ## Technical Notes
-Nothing for now.
+Switched out the global variable `init s` for `initial population` and `initial infected`
+- `init s` is an auxiliary variable and equivalent to `initial population - initial infected` therefore the switch is adequate.
 
 ## Other Notes
 Sourced `colors.json` scheme from [sashamaps](https://sashamaps.net/docs/resources/20-colors/)

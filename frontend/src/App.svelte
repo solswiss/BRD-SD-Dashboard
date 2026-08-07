@@ -3,27 +3,35 @@
   import colors from '../colors.json';
   import charts from '../charts.json';
   import Input from '../components/Input.svelte'
-  import MultiSelect from 'svelte-multiselect'
 
-  // populated by Flask backend
+  // Constants
+  const SCENARIO_BASELINE = 'Baseline';
+  const DEFAULT_TIME_STEP = 0.0625;
+  const COLOR_SCHEME = colors.scheme;
+  const LINE_TYPES = ['solid', 'dashdot', 'dot'];
+
+  // State
   let globals = $state({});
   let domains = $state({});
   let chart = $state(Object.keys(charts)[0]);
   let views = $state(["All Views"]);
   let view = $state("All Views");
-  const unitsCache = new Map()
-
-  const SCENARIO_ALPHA_NAME = 'Baseline'
-  let inputs = $state({ "initial_time": 0, "final_time": 60 , "time_step": 0.0625})
+  
+  let inputs = $state({ 
+    initial_time: 0, 
+    final_time: 60, 
+    time_step: DEFAULT_TIME_STEP 
+  });
   let simulationResults = $state({});
   let errorMessage = $state("");
   let showScenarioModal = $state(false);
-  let inputScenarioName = $state('10A')
-  let ephScenario = $state(SCENARIO_ALPHA_NAME)
-  let scenarios = {[SCENARIO_ALPHA_NAME]: {'controls': {}, 'inputs': {}}};
-  let scenario = $state(SCENARIO_ALPHA_NAME);
-  let selectedScenarios = $state([SCENARIO_ALPHA_NAME])
-  let kpiGroups = $state([])
+  let inputScenarioName = $state('10A');
+  let ephScenario = $state(SCENARIO_BASELINE);
+  
+  let scenarios = { [SCENARIO_BASELINE]: { 'controls': {}, 'inputs': {} } };
+  let scenario = $state(SCENARIO_BASELINE);
+  let selectedScenarios = $state([SCENARIO_BASELINE]);
+  let kpiGroups = $state([]);
   let activeKpiGroup = $state('Epidemiology');
   let isLoading = $state(false);
   let isInitializing = $state(true);
@@ -32,230 +40,249 @@
   let kpiContainer;
   let Plotly;
 
+  const unitsCache = new Map();
+  const fetchCache = new Map();
+
+  // Sync inputs to current scenario
   $effect(() => {
-    let ephin = $state.snapshot(inputs)
-    scenarios[scenario]['inputs'] = ephin
-    console.log(selectedScenarios)
-    if (selectedScenarios.length === 0) selectedScenarios = [SCENARIO_ALPHA_NAME]
-    // console.log('ephemereal',inputs['fractional_profitability_rate'])
-    // for (const [k,v] of Object.entries(scenarios)) {
-    //   try {
-    //     console.log(k,v['inputs']['fractional_profitability_rate'])
-    //   } catch { console.error('error') }
-    // }
-  })
+    const snapshot = $state.snapshot(inputs);
+    scenarios[scenario]['inputs'] = snapshot;
+    if (selectedScenarios.length === 0) selectedScenarios = [SCENARIO_BASELINE];
+  });
 
   onMount(async () => {
     const mod = await import('plotly.js-dist-min');
     Plotly = mod.default;
 
-    await fetchBaseline();
-    await fetchGlobals();
-    await fetchDomains();
+    await Promise.all([fetchBaseline(), fetchGlobals(), fetchDomains()]);
     await setInputs();
     await runSimulation();
 
     isInitializing = false;
   });
 
-  async function fetchBaseline() {
+  async function fetchWithCache(url) {
+    if (fetchCache.has(url)) return fetchCache.get(url);
     try {
-      const response = await fetch('/api/baseline_parameters');
+      const response = await fetch(url);
       const data = await response.json();
       if (response.ok) {
-        scenarios[SCENARIO_ALPHA_NAME] = {
-          'controls': data.controls,
-          'inputs': data.inputs
-        };
+        fetchCache.set(url, data);
+        return data;
       } else {
-        errorMessage = "Failed to load model structural parameters.";
-        isInitializing = false;
+        throw new Error(`API error: ${response.status}`);
       }
     } catch (err) {
-      errorMessage = "Could not parse baseline parameters from Flask execution server.";
+      errorMessage = `Failed to fetch from ${url}`;
+      isInitializing = false;
+      throw err;
+    }
+  }
+
+  async function fetchBaseline() {
+    try {
+      const data = await fetchWithCache('/api/baseline_parameters');
+      scenarios[SCENARIO_BASELINE] = {
+        'controls': data.controls,
+        'inputs': data.inputs
+      };
+    } catch (err) {
+      errorMessage = "Could not load baseline parameters.";
       isInitializing = false;
     }
   }
 
   async function fetchGlobals() {
     try {
-     const response = await fetch('api/globals');
-      const data = await response.json();
-      if (response.ok) {
-        globals = data.globals
-        kpiGroups = data.kpi_groups
-        await runSimulation();
-      } else {
-        errorMessage = "Failed to load model input globals.";
-        isInitializing = false;
-      }
+      const data = await fetchWithCache('/api/globals');
+      globals = data.globals;
+      kpiGroups = data.kpi_groups;
     } catch (err) {
-      errorMessage = "Could not parse input globals from Flask execution server.";
+      errorMessage = "Could not load input globals.";
       isInitializing = false;
     }
   }
 
   async function fetchDomains() {
     try {
-      const response = await fetch('api/domains');
-      const data = await response.json();
-      if (response.ok) {
-        domains = data;
-        views = views.concat(Object.keys(domains));
-        //console.log('loaded domains',domains)
-      } else {
-        errorMessage = "Failed to load model input domains.";
-        isInitializing = false;
-      }
+      const data = await fetchWithCache('/api/domains');
+      domains = data;
+      views = ["All Views", ...Object.keys(domains)];
     } catch (err) {
-      errorMessage = "Could not parse input domains from Flask execution server.";
+      errorMessage = "Could not load input domains.";
       isInitializing = false;
     }
   }
-  
+
+  function updateInputValue(event=null) {
+    if (event) console.log('updateinputvalue called by',event.currentTarget)
+    console.log('running',scenario,inputs['vaccination_coverage'])
+    console.log(scenarios[scenario]['inputs']['vaccination_coverage'])
+    scenarios[scenario]['inputs'] = inputs
+    console.log(scenarios[scenario]['inputs']['vaccination_coverage'])
+    runSimulation()
+  }
+
   async function runSimulation() {
     isLoading = true;
     errorMessage = "";
-    //updateScenario()
 
-    let initialTime = inputs.initial_time
-    let finalTime = inputs.final_time
+    let finalTime = inputs.final_time;
+    const initialTime = inputs.initial_time;
+    
     if (finalTime <= initialTime) {
-      //errorMessage = "Final time must be greater than initial time"
-      finalTime = initialTime + 1
+      finalTime = initialTime + 1;
     }
-
-    let inputs_draft = {}
-    for (const [k,v] of Object.entries(scenarios)) {
-      inputs_draft[k] = v.inputs
-    }
+    const inputsDraft = Object.fromEntries(
+      Object.entries(scenarios).map(([k, v]) => [k, v.inputs])
+    );
     
     try {
       const response = await fetch('/api/simulate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initialTime, finalTime, timeStep:inputs.time_step, inputs:inputs_draft })
+        body: JSON.stringify({ 
+          initialTime, 
+          finalTime, 
+          timeStep: inputs.time_step, 
+          inputs: inputsDraft 
+        })
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        simulationResults = data;
-        renderChart();
-        load_kpi_plots()
+        simulationResults = data
+        //console.log(simulationResults[SCENARIO_BASELINE]['variables']['init s'][0])
+        //console.log(simulationResults[SCENARIO_BASELINE]['variables']['initial population'][0])
+        renderChart()
+        loadKpiPlots()
       } else {
-        errorMessage = data.error || "Failed to process simulation data.";
+        errorMessage = data.error || "Simulation failed.";
       }
     } catch (err) {
-      errorMessage = "Could not communicate with Flask backend API"
-      console.error(err)
+      errorMessage = "Could not communicate with backend.";
+      console.error(err);
     } finally {
       isLoading = false;
     }
   }
 
   async function setInputs() {
-    Object.entries(globals).forEach(e => {
-      inputs[e[0]] = e[1].default;
+    Object.entries(globals).forEach(([key, val]) => {
+      inputs[key] = val.default;
     });
-    Object.entries(domains).forEach(d => {
-      d[1].forEach(e => {
-        inputs[e['py_name']] = e['default'];
+    Object.entries(domains).forEach(([_, elements]) => {
+      elements.forEach((el) => {
+        inputs[el.py_name] = el.default;
       });
     });
   }
 
-  // creates and sets scenario
   async function createScenario() {
-    let ephin = $state.snapshot(inputs)
+    const snapshot = $state.snapshot(inputs);
     scenarios[ephScenario] = {
       'controls': {
-        'initial_time': inputs['initial_time'],
-        'final_time': inputs['final_time'],
-        'time_step': inputs['time_step'],
+        'initial_time': inputs.initial_time,
+        'final_time': inputs.final_time,
+        'time_step': inputs.time_step,
       },
-      'inputs': ephin,
-    }
+      'inputs': snapshot,
+    };
+    scenario = ephScenario;
+    //if (Object.keys(selectedScenarios).length === 1 && Object.keys(selectedScenarios)[0] === SCENARIO_BASELINE) selectedScenarios.push(scenario)
+    selectedScenarios.push(scenario)
+    console.log('created',scenario)
+    renderChart()
     await runSimulation()
-    await renderChart()
-    scenario = ephScenario
   }
 
   async function loadScenario() {
+    scenario = ephScenario
     inputs = scenarios[scenario]['inputs']
-    await runSimulation()
+    console.log('loaded',scenario)
+    await runSimulation();
   }
-  
+
   async function deleteScenario() {
-    if (ephScenario === SCENARIO_ALPHA_NAME) {
-      errorMessage = "Don't delete the Baseline scenario!"
-      console.log("Don't do it.")
-      return
+    if (ephScenario === SCENARIO_BASELINE) {
+      errorMessage = "Cannot delete the Baseline scenario.";
+      return;
     }
+    
+    delete scenarios[ephScenario];
+    
     if (scenario === ephScenario) {
-      scenario = SCENARIO_ALPHA_NAME
-      ephScenario = scenario
-      inputs = scenarios[scenario]['inputs']
-      await runSimulation()
+      scenario = SCENARIO_BASELINE;
+      ephScenario = scenario;
+      inputs = scenarios[scenario]['inputs'];
+      await runSimulation();
     }
-    delete scenarios[ephScenario]
   }
 
   async function importScenario(event) {
-    const file = event.target.files[0]
-    if (!file) return
+    const file = event.target.files[0];
+    if (!file) return;
+    
     try {
-      const text = await file.text()
-      const data = JSON.parse(text)
+      const text = await file.text();
+      const data = JSON.parse(text);
       scenarios[inputScenarioName] = {
         'controls': {
-          'initial_time': inputs['initial_time'],
-          'final_time': inputs['final_time'],
-          'time_step': inputs['time_step'],
+          'initial_time': inputs.initial_time,
+          'final_time': inputs.final_time,
+          'time_step': inputs.time_step,
         },
         'inputs': data,
-      }
-      await runSimulation()
-      await renderChart()
-      scenario = inputScenarioName
-      ephScenario = scenario
+      };
+      scenario = inputScenarioName;
+      ephScenario = scenario;
+      console.log('imported',scenario)
+      await runSimulation();
     } catch {
-      errorMessage = "Failed to import scenario"
-      console.log('Failed to import scenario')
+      errorMessage = "Failed to import scenario.";
     }
-    ephImportFile = null
   }
 
   function exportScenario() {
-    const pretty = JSON.stringify(inputs, null, 2)
-    const blob = new Blob([pretty], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "testdata.json"//`${scenario}_params.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    const blob = new Blob([JSON.stringify(inputs, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${scenario}_params.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   async function getUnits(pyName) {
-    if (unitsCache.has(pyName)) return unitsCache.get(pyName) || ''
-    const res = await fetch(`api/units?q=${pyName}`)
-    const units = await res.text()
-    unitsCache.set(pyName, units)
-    return units
-  }
-
-  async function load_kpi_plots() {
-    const response = await fetch(`/api/kpi_plots?q=${activeKpiGroup}`)
-    const data = await response.json()
-    if (response.ok) {
-      Plotly.newPlot(kpiContainer,data.data,data.layout)
-    } else {
-      errorMessage = data.error || "Failed to process simulation data.";
+    if (unitsCache.has(pyName)) return unitsCache.get(pyName) || '';
+    
+    try {
+      const res = await fetch(`/api/units?q=${pyName}`);
+      const units = await res.text();
+      unitsCache.set(pyName, units);
+      return units;
+    } catch {
+      return '';
     }
   }
 
-  function build_trace(key, xData, vars, targetTracks, colors, lineType) {
+  async function loadKpiPlots() {
+    try {
+      const response = await fetch(`/api/kpi_plots?q=${activeKpiGroup}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        Plotly.newPlot(kpiContainer, data.data, data.layout);
+      } else {
+        errorMessage = "Failed to load KPI plots.";
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function buildTrace(key, xData, vars, targetTracks, colors, lineType) {
     // Filter and build traces only if keys exist in your model run data
     try {
       return targetTracks
@@ -267,7 +294,7 @@
         mode: 'lines',
         name: `${key}: ${track.name}`,
         line: { dash: lineType, color: track.color, width: 2.5 },
-        legendgroup: SCENARIO_ALPHA_NAME,
+        legendgroup: SCENARIO_BASELINE,
         showlegend: false,
         marker: { color: colors ? colors[i] : null }
       }))
@@ -276,8 +303,13 @@
     }
   }
 
-  async function renderChart() {
-    if (!Plotly || Object.keys(simulationResults[SCENARIO_ALPHA_NAME]).length === 0) return;
+  async function renderChart(event=null) {
+    console.log('rendering',chart,scenario,inputs['vaccination_coverage'])
+    //if (event) console.log('called by',event.currentTarget)
+    if (!Plotly || (Object.keys(Object.values(simulationResults[selectedScenarios[0]])[1] || {})).length === 0) {
+      console.log('buffering; exiting early')
+      return
+    }
     const chartValues = charts[chart]
     const targetTracks = chartValues.map((e) => ({key: e, name: e}));
     let colorScheme = colors.scheme
@@ -287,9 +319,10 @@
     let traces = []
     let lineTypes = ['solid', 'dashdot', 'dot']
     for (const [i,k] of Object.keys(scenarios).filter(k => selectedScenarios.includes(k)).entries()) {
-      if (colorsUnderflow) traces.push(...build_trace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, lineTypes[i%tracksLength]))
-      else if (colorsOverflow) traces.push(...build_trace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, colorScheme.slice(i*tracksLength, tracksLength), lineTypes[i%tracksLength]))
-      else traces.push(...build_trace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, colorScheme, lineTypes[i%tracksLength]))
+      if (!simulationResults[k]) continue;
+      if (colorsUnderflow) traces.push(...buildTrace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, lineTypes[i%tracksLength]))
+      else if (colorsOverflow) traces.push(...buildTrace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, colorScheme.slice(i*tracksLength, tracksLength), lineTypes[i%tracksLength]))
+      else traces.push(...buildTrace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, colorScheme, lineTypes[i%tracksLength]))
     }
     if (traces.length === 0) {
       errorMessage = "Warning: None of the target plotting variables were found in the model output keys. Check spelling.";
@@ -316,7 +349,6 @@
 
     Plotly.newPlot(chartContainer, traces, layout, config, { responsive: true });
   }
-
 </script>
 
 {#if errorMessage}
@@ -341,7 +373,6 @@
     <span>Scenario Testing</span>
     <button class="close" onclick={() => showScenarioModal=false}>close</button>
   </div>
-  <!-- <MultiSelect id="scenario-testing-select" class="input-scenario" options={Object.keys(scenarios)} placeholder="Select a scenario" bind:selected={selectedScenarios}/> -->
   <label for="scenario-testing-select">Choose scenarios to compare (hold Ctrl/Cmd)</label>
   <select id="scenario-testing-select" onchange={renderChart} multiple bind:value={selectedScenarios}>
     {#each Object.keys(scenarios) as s}
@@ -356,37 +387,45 @@
   </div>
 </div>
 {/if}
-<main class="main">  
+
+<main class="main">
   <section class="globals">
     <div class="field">
       <label for="chart">Chart</label>
       <select name="chart" id="chart" bind:value={chart} onchange={renderChart}>
-        {#each Object.keys(charts) as chart}
-          <option value="{chart}">{chart}</option>
+        {#each Object.keys(charts) as chartOption}
+          <option value="{chartOption}">{chartOption}</option>
         {/each}
       </select>
     </div>
     <div class="field">
       <label for="view">View</label>
       <select name="view" id="view" bind:value={view}>
-        {#each views as view_option}
-          <option value="{view_option}">{view_option}</option>
+        {#each views as viewOption}
+          <option value="{viewOption}">{viewOption}</option>
         {/each}
       </select>
     </div>
     <div class="field">
-      <label for="kpi-select">Key Performance Indicators</label>
-      <select name="kpi-select" id="kpi-select" bind:value={activeKpiGroup} onchange={load_kpi_plots}>
-        {#each kpiGroups as kpis_option}
-          <option value="{kpis_option}">{kpis_option}</option>
+      <label for="kpi-select">KPI</label>
+      <select name="kpi-select" id="kpi-select" bind:value={activeKpiGroup} onchange={loadKpiPlots}>
+        {#each kpiGroups as kpiOption}
+          <option value="{kpiOption}">{kpiOption}</option>
         {/each}
       </select>
     </div>
     {#each Object.values(globals) as element}
       <div class="field">
         <label for="{element.py_name}">{element.real_name}</label>
-        <input id="{element.py_name}" type="number" min="{element.min}" max="{element.max}" bind:value={inputs[element.py_name]} onchange={runSimulation} />
-      </div>  
+        <input 
+          id="{element.py_name}" 
+          type="number" 
+          min="{element.min}" 
+          max="{element.max}" 
+          bind:value={inputs[element.py_name]} 
+          onchange={runSimulation} 
+        />
+      </div>
     {/each}
     <div class="field">
       <div class="scenario-buttons">
@@ -395,33 +434,42 @@
         <button onclick={exportScenario}>Export</button>
         <button onclick={deleteScenario}>Delete</button>
       </div>
-      <input class="input-scenario" type="text" bind:value={ephScenario} list="select-scenario" placeholder="Select a scenario"/>
-      <datalist>
-        {#each Object.keys(scenarios) as scenario}
-          <option value="{scenario}">{scenario}</option>
+      <input 
+        class="input-scenario" 
+        type="text" 
+        bind:value={ephScenario} 
+        list="select-scenario" 
+        placeholder="Select a scenario"
+      />
+      <datalist id="select-scenario">
+        {#each Object.keys(scenarios) as scenarioOption}
+          <option value="{scenarioOption}">{scenarioOption}</option>
         {/each}
       </datalist>
-      <span class="italics detail-text">Working scenario: {scenario}</span>
+      <span class="italics detail-text">Working: {scenario}</span>
     </div>
-
   </section>
 
   <section class="displays">
     <section class="chart chart-wrapper" class:hidden={!simulationResults}>
       <div bind:this={chartContainer} class="plotly-target"></div>
     </section>
-    <section bind:this={kpiContainer} class="kpi-wrapper">
-    </section>
+    <section bind:this={kpiContainer} class="kpi-wrapper"></section>
   </section>
 
   <section class="inputs">
     {#if view === "All Views"}
       <section class="input-group columns">
-        {#each Object.entries(domains) as [domain, elements]}
+        {#each Object.entries(domains) as [domainName, elements]}
           <div class="input-column column">
-            <button class="domain-header" onclick={() => view=domain}>{domain}</button>
+            <button class="domain-header" onclick={() => view = domainName}>{domainName}</button>
             {#each elements as element}
-              <Input obj={element} bind:obj_of_inputs={inputs[element.py_name]} default_value={scenarios[SCENARIO_ALPHA_NAME]['inputs'][element.py_name]} runSimulation={runSimulation}/>
+              <Input 
+                obj={element} 
+                bind:obj_of_inputs={inputs[element.py_name]} 
+                default_value={scenarios[SCENARIO_BASELINE]['inputs'][element.py_name]} 
+                func={updateInputValue}
+              />
             {/each}
           </div>
         {/each}
@@ -430,11 +478,16 @@
       <section class="input-column column">
         <div class="input-header">
           <span>{view}</span>
-          <button class="domain-header" onclick={() => view=views[0]}>[{views[0]} view]</button>
+          <button class="domain-header" onclick={() => view = "All Views"}>[All Views]</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));">
           {#each Object.values(domains[view]) as element}
-            <Input obj={element} bind:obj_of_inputs={inputs[element.py_name]} default_value={scenarios[SCENARIO_ALPHA_NAME]['inputs'][element.py_name]} runSimulation={runSimulation}/>
+            <Input 
+              obj={element} 
+              bind:obj_of_inputs={inputs[element.py_name]} 
+              default_value={scenarios[SCENARIO_BASELINE]['inputs'][element.py_name]} 
+              func={updateInputValue}
+              />
           {/each}
         </div>
       </section>
@@ -451,12 +504,12 @@
   select, input {
     background: none;
     color: #000;
-    border: 2px solid #e2e8f0; 
+    border: 2px solid #e2e8f0;
   }
-  .field { 
-    display: flex; 
-    flex-direction: row; 
-    gap: 4px; 
+  .field {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
 
     label {
       flex: 1;
@@ -475,25 +528,25 @@
       font-size: 14px;
     }
   }
-  label { 
-    font-size: 0.9rem; 
-    color: #111; 
+  label {
+    font-size: 0.9rem;
+    color: #111;
   }
-  button { 
-    background: none; 
+  button {
+    background: none;
     color: inherit;
-    border: 2px solid #e2e8f0; 
-    border-radius: 0; 
-    cursor: pointer; 
-    font-size: .8rem; 
-    transition: background 0.2s; 
+    border: 2px solid #e2e8f0;
+    border-radius: 0;
+    cursor: pointer;
+    font-size: .8rem;
+    transition: background 0.2s;
   }
-  button:hover:not(:disabled) { 
-    background: #efefef; 
+  button:hover:not(:disabled) {
+    background: #efefef;
   }
-  button:disabled { 
-    background: #94a3b8; 
-    cursor: not-allowed; 
+  button:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
   }
   button.close {
     position: absolute;
@@ -509,12 +562,12 @@
     color: #333;
     line-height: 1;
   }
-  
-  .error { 
-    color: #e22; 
-    background: #fff; 
-    padding: 12px; 
-    font-weight: 500; 
+
+  .error {
+    color: #e22;
+    background: #fff;
+    padding: 12px;
+    font-weight: 500;
   }
 
   nav {
@@ -574,8 +627,8 @@
     grid-template-areas: "globals displays" "inputs inputs";
     gap: 0;
     > * {
-      background: white; 
-      border: 1px solid #e2e8f0; 
+      background: white;
+      border: 1px solid #e2e8f0;
     }
   }
 
@@ -598,14 +651,14 @@
     display: grid;
     grid-template-columns: 70% 30%;
   }
-  .chart-wrapper { 
-    border-radius: .5rem; 
-    padding: 12px; 
+  .chart-wrapper {
+    border-radius: .5rem;
+    padding: 12px;
     max-width: 100%;
   }
-  .plotly-target { 
-    max-width: 100%; 
-    min-height: 450px; 
+  .plotly-target {
+    max-width: 100%;
+    min-height: 450px;
   }
   .kpi-wrapper {
     display: flex;
@@ -641,5 +694,4 @@
     flex-direction: column;
     gap: 8px;
   }
-
 </style>

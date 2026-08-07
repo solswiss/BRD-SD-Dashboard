@@ -1,13 +1,13 @@
 <script>
-    let {obj, obj_of_inputs = $bindable(), default_value = obj.default, runSimulation } = $props();
+    let {obj, obj_of_inputs = $bindable(), default_value = obj.default, func } = $props();
 </script>
 
 <div class="input-container">
     <label for="{obj.py_name}">{obj.real_name} ({obj.units})</label>
     <div class="input">
-        <input class="input-slider" type="range" name="{obj.py_name}" id="{obj.py_name}" min="{obj.min}" max="{obj.max}" step="{obj.step}" bind:value={obj_of_inputs} oninput={runSimulation}>
-        <input class="input-number" type="number" name="{obj.py_name}" id="{obj.py_name}"  min="{obj.min}" max="{obj.max}" bind:value={obj_of_inputs} oninput={runSimulation}>
-        <button onclick={()=>{obj_of_inputs=default_value;runSimulation();}}>⟳</button>
+        <input class="input-slider" type="range" name="{obj.py_name}" id="{obj.py_name}" min="{obj.min}" max="{obj.max}" step="{obj.step}" bind:value={obj_of_inputs} oninput={func}>
+        <input class="input-number" type="number" name="{obj.py_name}" id="{obj.py_name}"  min="{obj.min}" max="{obj.max}" bind:value={obj_of_inputs} oninput={func}>
+        <button onclick={()=>{obj_of_inputs=default_value;func()}}>⟳</button>
     </div>
 </div>
 

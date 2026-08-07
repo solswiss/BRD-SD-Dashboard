@@ -241,7 +241,7 @@ def unit_cost_of_metaphylactic_amu():
     other_deps={
         "_integ_cumulative_antimicrobial_usage": {
             "initial": {},
-            "step": {"amu_rate": 1},
+            "step": {"metaphylaxis_rate": 1, "treatment_rate": 1},
         }
     },
 )

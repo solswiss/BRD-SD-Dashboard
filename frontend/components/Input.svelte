@@ -1,5 +1,5 @@
 <script>
-    let {obj, obj_of_inputs = $bindable(), runSimulation } = $props();
+    let {obj, obj_of_inputs = $bindable(), default_value = obj.default, runSimulation } = $props();
 </script>
 
 <div class="input-container">
@@ -7,7 +7,7 @@
     <div class="input">
         <input class="input-slider" type="range" name="{obj.py_name}" id="{obj.py_name}" min="{obj.min}" max="{obj.max}" step="{obj.step}" bind:value={obj_of_inputs} oninput={runSimulation}>
         <input class="input-number" type="number" name="{obj.py_name}" id="{obj.py_name}"  min="{obj.min}" max="{obj.max}" bind:value={obj_of_inputs} oninput={runSimulation}>
-        <button onclick={(e) => {obj_of_inputs=obj.default; runSimulation();}}>⟳</button>
+        <button onclick={()=>{obj_of_inputs=default_value;runSimulation();}}>⟳</button>
     </div>
 </div>
 

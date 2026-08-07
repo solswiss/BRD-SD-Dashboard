@@ -41,6 +41,7 @@ Complete core functionality tasks.
 - [x] KPIs
 - [ ] Sensitivity Analysis
 - [ ] Scenario Testing
+    - [ ] disable delete baseline scenario, used as defaults
 
 ### 2. Frontend
 - [ ] Harmonize UI language

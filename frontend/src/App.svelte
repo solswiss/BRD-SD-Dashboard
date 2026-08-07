@@ -10,14 +10,16 @@
   let chart = $state(Object.keys(charts)[0]);
   let views = $state(["All Views"]);
   let view = $state("All Views");
-  let inputs = $state({ "initial_time": 0, "final_time": 60 , "time_step": 0.0625});
   const unitsCache = new Map()
 
+  const SCENARIO_ALPHA_NAME = 'Baseline'
+  let inputs = $state({ "initial_time": 0, "final_time": 60 , "time_step": 0.0625})
   let simulationResults = $state({});
   let errorMessage = $state("");
   let show_scenario_modal = $state(false);
-  let scenario = $state('Baseline');
-  let scenarios = $state({scenario: {'controls': {}, 'inputs': {}}});
+  let ephScenario = $state(SCENARIO_ALPHA_NAME)
+  let scenarios = {[SCENARIO_ALPHA_NAME]: {'controls': {}, 'inputs': {}}};
+  let scenario = $state(Object.keys(scenarios)[0]);
   let kpiGroups = $state([])
   let activeKpiGroup = $state('Epidemiology');
   let isLoading = $state(false);
@@ -27,8 +29,16 @@
   let kpiContainer;
   let Plotly;
 
-  // $effect(() => {
-  // })
+  $effect(() => {
+    // let ephin = $state.snapshot(inputs)
+    // scenarios[scenario]['inputs'] = ephin
+    // console.log('ephemereal',inputs['fractional_profitability_rate'])
+    // for (const [k,v] of Object.entries(scenarios)) {
+    //   try {
+    //     console.log(k,v['inputs']['fractional_profitability_rate'])
+    //   } catch { console.error('error') }
+    // }
+  })
 
   onMount(async () => {
     const mod = await import('plotly.js-dist-min');
@@ -38,6 +48,7 @@
     await fetchGlobals();
     await fetchDomains();
     await setInputs();
+    await runSimulation();
 
     isInitializing = false;
   });
@@ -47,7 +58,7 @@
       const response = await fetch('/api/baseline_parameters');
       const data = await response.json();
       if (response.ok) {
-        scenarios['Baseline'] = {
+        scenarios[SCENARIO_ALPHA_NAME] = {
           'controls': data.controls,
           'inputs': data.inputs
         };
@@ -56,7 +67,7 @@
         isInitializing = false;
       }
     } catch (err) {
-      errorMessage = "Could not parse baseline_parameters from Flask execution server.";
+      errorMessage = "Could not parse baseline parameters from Flask execution server.";
       isInitializing = false;
     }
   }
@@ -87,7 +98,6 @@
         domains = data;
         views = views.concat(Object.keys(domains));
         //console.log('loaded domains',domains)
-        await runSimulation();
       } else {
         errorMessage = "Failed to load model input domains.";
         isInitializing = false;
@@ -101,19 +111,25 @@
   async function runSimulation() {
     isLoading = true;
     errorMessage = "";
+    //updateScenario()
 
-    let initialTime = inputs.initial_time;
-    let finalTime = inputs.final_time;
+    let initialTime = inputs.initial_time
+    let finalTime = inputs.final_time
     if (finalTime <= initialTime) {
-      errorMessage = "Final time must be greater than initial time"
+      //errorMessage = "Final time must be greater than initial time"
       finalTime = initialTime + 1
     }
-        
+
+    let inputs_draft = {}
+    for (const [k,v] of Object.entries(scenarios)) {
+      inputs_draft[k] = v.inputs
+    }
+    
     try {
       const response = await fetch('/api/simulate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initialTime, finalTime, timeStep:inputs.time_step, inputs })
+        body: JSON.stringify({ initialTime, finalTime, timeStep:inputs.time_step, inputs:inputs_draft })
       });
 
       const data = await response.json();
@@ -126,7 +142,8 @@
         errorMessage = data.error || "Failed to process simulation data.";
       }
     } catch (err) {
-      errorMessage = "Could not communicate with Flask backend API.";
+      errorMessage = "Could not communicate with Flask backend API"
+      console.error(err)
     } finally {
       isLoading = false;
     }
@@ -143,19 +160,24 @@
     });
   }
 
-  function createScenario() {
-    scenarios[scenario] = {
+  // creates and sets scenario
+  async function createScenario() {
+    let ephin = $state.snapshot(inputs)
+    scenarios[ephScenario] = {
       'controls': {
         'initial_time': inputs['initial_time'],
         'final_time': inputs['final_time'],
         'time_step': inputs['time_step'],
       },
-      'inputs': inputs,
-    };
+      'inputs': ephin,
+    }
+    await runSimulation()
+    await renderChart()
+    scenario = ephScenario
   }
 
   async function loadScenario() {
-    inputs = scenarios[scenario]['inputs'];
+    inputs = scenarios[scenario]['inputs']
     //console.log("loaded scenario",scenario,inputs);
     await runSimulation();
   }
@@ -177,34 +199,40 @@
       errorMessage = data.error || "Failed to process simulation data.";
     }
   }
-  async function renderChart() {
-    if (!Plotly || !simulationResults) return;
 
-    const xData = simulationResults.time;
-    const vars = simulationResults.variables;
-
-    const colorScheme = colors.scheme;
-    const chartValues = charts[chart]
-    const targetTracks = chartValues.map((e, i) => ({key: e, name: e, color: colorScheme[i]}));
-
+  function build_trace(key, xData, vars, targetTracks) {
     // Filter and build traces only if keys exist in your model run data
-    const traces = targetTracks
+    return targetTracks
       .filter(track => vars[track.key] !== undefined)
       .map(track => ({
         x: xData,
         y: vars[track.key],
         type: 'scatter',
         mode: 'lines',
-        name: track.name,
-        line: { color: track.color, width: 2.5 }
-      }));
+        name: `${key}: ${track.name}`,
+        line: { color: track.color, width: 2.5 },
+        legendgroup: SCENARIO_ALPHA_NAME,
+        showlegend: false
+      }))
+  }
 
+  async function renderChart() {
+    if (!Plotly || Object.keys(simulationResults[SCENARIO_ALPHA_NAME]).length === 0) return;
+    //let n = Object.keys(scenarios).length
+    const colorScheme = colors.scheme
+    const chartValues = charts[chart]
+    const targetTracks = chartValues.map((e, i) => ({key: e, name: e, color: colorScheme[i]}));
+    let traces = []
+    for (const k of Object.keys(scenarios)) {
+      //console.log(k,scenarios[k]['inputs']['fractional_profitability_rate'])
+      traces.push(...build_trace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks))
+    }
     if (traces.length === 0) {
       errorMessage = "Warning: None of the target plotting variables were found in the model output keys. Check spelling.";
       return;
     }
 
-    let yunits = getUnits(chartValues[0]); // no validation for *all* variables, blind trust
+    let yunits = await getUnits(chartValues[0]); // no validation for *all* variables, blind trust
     const layout = {
       title: { text: chart, font: { size: 18 } },
       xaxis: { title: { text: 'Time (Days)' }, gridcolor: '#f0f0f0' },
@@ -213,7 +241,7 @@
       hovermode: 'x unified', // Shows all variable tooltips at once on timeline drag
       plot_bgcolor: '#ffffff',
       paper_bgcolor: '#ffffff',
-      legend: { x: 1, xanchor: 'right', y: -.5 }
+      legend: { orientation:'h', yanchor:'top', y:-0.2, 'xanchor':'left', x:0 }
     };
 
     const config = {
@@ -287,16 +315,16 @@
       </div>  
     {/each}
     <div class="field">
-      <input type="text" name="" bind:value={scenario} list="select-scenario" placeholder="Select a scenario"/>
+      <div class="scenario-buttons">
+        <button onclick={createScenario}>Save as</button>
+        <button onclick={loadScenario}>Load</button>
+      </div>
+      <input id="input-scenario" type="text" bind:value={ephScenario} list="select-scenario" placeholder="Select a scenario"/>
       <datalist id="select-scenario">
         {#each Object.keys(scenarios) as scenario}
           <option value="{scenario}">{scenario}</option>
         {/each}
       </datalist>
-      <div class="scenario-buttons">
-        <button onclick={createScenario}>Save scenario</button>
-        <button onclick={loadScenario}>Load scenario</button>
-      </div>
     </div>
 
   </section>
@@ -316,7 +344,7 @@
           <div class="input-column column">
             <button class="domain-header" onclick={() => view=domain}>{domain}</button>
             {#each elements as element}
-              <Input obj={element} bind:obj_of_inputs={inputs[element.py_name]} runSimulation={runSimulation}/>
+              <Input obj={element} bind:obj_of_inputs={inputs[element.py_name]} default_value={scenarios[SCENARIO_ALPHA_NAME]['inputs'][element.py_name]} runSimulation={runSimulation}/>
             {/each}
           </div>
         {/each}
@@ -329,7 +357,7 @@
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));">
           {#each Object.values(domains[view]) as element}
-            <Input obj={element} bind:obj_of_inputs={inputs[element.py_name]} runSimulation={runSimulation}/>
+            <Input obj={element} bind:obj_of_inputs={inputs[element.py_name]} default_value={scenarios[SCENARIO_ALPHA_NAME]['inputs'][element.py_name]} runSimulation={runSimulation}/>
           {/each}
         </div>
       </section>
@@ -359,7 +387,7 @@
       line-height: 1;
       font-size: .8rem;
     }
-    select {
+    select, #input-scenario {
       height: min-content;
       width: 20ch;
       font-size: 14px;

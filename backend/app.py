@@ -9,7 +9,7 @@ import json
 app = Flask(__name__)
 CORS(app)
 
-model = pysd.load('model.py') 
+model = pysd.load('model.py')
 doc = model.doc
 
 shared_state = {'results': {'time':{}, 'variables':{}}}
@@ -178,21 +178,7 @@ def get_units():
     if py_name is None: return ''
     return all_variables[py_name.replace(' ','_').lower()].get('units')
 
-@app.route('/api/simulate', methods=['POST'])
-def simulate():
-    data = request.json or {}
-    
-    # extract controls
-    initial_time = float(data.get('initialTime', 0))
-    final_time = float(data.get('finalTime', 60))
-    time_step = float(data.get('timeStep', 1))
-
-    # hard guards
-    if final_time <= initial_time:
-        final_time = initial_time + 1
-    
-    # extract inputs
-    inputs = data.get('inputs', {})
+def run_model(initial_time, final_time, time_step, inputs):
     overrides = {}
     stateful_overrides = {}
     for pyname, value in inputs.items():
@@ -214,11 +200,33 @@ def simulate():
             "time": res.index.tolist(),
             "variables": {col: res[col].tolist() for col in res.columns}
         }
-        return jsonify(payload)
+        return payload
         
     except Exception as e:
-        print("Exception while simulating:",e)
-        return jsonify({"error": str(e)}), 400
+        print("Exception while in run_model:",e)
+        return {}
+
+@app.route('/api/simulate', methods=['POST'])
+def simulate():
+    data = request.json or {}
+    
+    # extract controls
+    initial_time = float(data.get('initialTime', 0))
+    final_time = float(data.get('finalTime', 60))
+    time_step = float(data.get('timeStep', 1))
+    inputs = data.get('inputs', {})
+
+    # hard guards
+    if final_time <= initial_time:
+        final_time = initial_time + 1
+
+    try:
+        res = {}
+        for k,v in inputs.items():
+            res[k] = run_model(initial_time, final_time, time_step, v)
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({"Exception in simulate": str(e)}), 400
 
 if __name__ == '__main__':
     init()

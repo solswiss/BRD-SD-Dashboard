@@ -39,20 +39,25 @@ Complete core functionality tasks.
 - [x] Globals
 - [x] Graph view selection
 - [x] KPIs
-- [ ] Sensitivity Analysis
-- [ ] Scenario Testing
+- [x] Sensitivity Analysis
+- [x] Scenario Testing
     - [x] disable delete baseline scenario, used as defaults
-    - [ ] warn delete
 
 ### 2. Frontend
 - [ ] Harmonize UI language
 - [ ] Consolidate repeating styles, e.g. font sizes (16px) and colors
 - [ ] Causal input nesting
+- [ ] Toast notifications
+- [ ] Warn scenario delete
+- [ ] Loading page
+    - [ ] Error display if backend connection fails
 
 ### 3. Testing & QA
 - [ ] Test inputs
-    - [ ] Why is antimicrobial use disproportionately large?
+    1. Q: Why is antimicrobial use disproportionately large? A: Because the equation for cumulative antimicrobial use is INTEG of two stocks as opposed to two rates.
 - [ ] Verify cross-browser/device compatibility
+- [ ] Add safety checks for faulty imports etc.
+- [ ] Variable dependencies validation/warnings: sensitivity analysis
 
 ### 4. Technical Polish
 - [ ] Implement caches

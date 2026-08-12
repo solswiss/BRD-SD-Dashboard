@@ -73,9 +73,11 @@ Complete core functionality tasks.
 ## Technical Notes
 Switched out the global variable `init s` for `initial population` and `initial infected`
 - `init s` is an auxiliary variable and equivalent to `initial population - initial infected` therefore the switch is adequate.
-
+Hacky workaround for `InputField` due to the Svelte 4 nature of Carbon Components
+- Easy fix: using vanilla `range` or a Svelte 5 component
 ## Other Notes
 Sourced `colors.json` scheme from [sashamaps](https://sashamaps.net/docs/resources/20-colors/)
+Sourced `MultiSelect` from [svelte-multiselect](https://www.npmjs.com/package/svelte-multiselect)
 
 ## Discussion
 ### Blockers

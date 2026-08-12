@@ -1,0 +1,54 @@
+<script>
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import Button from '$lib/components/button.svelte';
+	import { useNumberFieldButton } from './number-field.svelte.js';
+	import { cn } from '$lib/utils';
+	import { box } from 'svelte-toolbelt';
+	import { onDestroy } from 'svelte';
+
+	let {
+		ref = $bindable(null),
+		variant = 'ghost',
+		size = 'icon',
+		class: className,
+		children,
+		disabled = false,
+		onpointerdown,
+		onpointerup,
+		onpointerleave,
+		onpointercancel,
+		onclick,
+		tabindex = -1,
+		...rest
+	} = $props();
+
+	const buttonState = useNumberFieldButton({
+		direction: 'up',
+		onpointerdown: box.with(() => onpointerdown),
+		onpointerup: box.with(() => onpointerup),
+		onpointerleave: box.with(() => onpointerleave),
+		onpointercancel: box.with(() => onpointercancel),
+		onclick: box.with(() => onclick),
+		disabled: box.with(() => disabled)
+	});
+
+	onDestroy(() => buttonState.destroy());
+</script>
+
+<Button
+	{variant}
+	{size}
+	{tabindex}
+	bind:ref
+	data-slot="number-field-increment"
+	aria-label="Increase"
+	class={cn('touch-manipulation', className)}
+	{...buttonState.props}
+	{...rest}
+>
+	{#if children}
+		{@render children?.()}
+	{:else}
+		<PlusIcon />
+	{/if}
+</Button>

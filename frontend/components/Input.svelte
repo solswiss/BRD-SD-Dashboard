@@ -1,77 +1,46 @@
 <script>
-    let {obj, obj_of_inputs = $bindable(), default_value = obj.default, func } = $props();
+    import { Slider } from "carbon-components-svelte";
+    import Button from "$lib/components/button.svelte";
+    import { Tooltip } from "bits-ui";
+    import { HugeiconsIcon } from "@hugeicons/svelte";
+    import { Information, InformationCircleIcon, Reload } from "@hugeicons/core-free-icons";
+    let {obj, obj_of_inputs = $bindable(), default_value = obj.default, func, resetInput } = $props();
+    let labelText = $derived(`${obj.real_name} = ${obj_of_inputs.toFixed(2)}`)
 </script>
 
 <div class="input-container">
-    <label for="{obj.py_name}">{obj.real_name} ({obj.units})</label>
-    <div class="input">
-        <input class="input-slider" type="range" name="{obj.py_name}" id="{obj.py_name}" min="{obj.min}" max="{obj.max}" step="{obj.step}" bind:value={obj_of_inputs} oninput={func}>
-        <input class="input-number" type="number" name="{obj.py_name}" id="{obj.py_name}"  min="{obj.min}" max="{obj.max}" bind:value={obj_of_inputs} oninput={func}>
-        <button onclick={()=>{obj_of_inputs=default_value;func()}}>⟳</button>
+    <Slider onpointerup={func} fullWidth hideTextInput {labelText} name={obj.py_name} id={obj.py_name} min={obj.min} max={obj.max} step={obj.step} bind:value={obj_of_inputs}/>
+    <div class="input-buttons-container">
+        <Tooltip.Root>
+            <Tooltip.Trigger>
+                <Button variant="outline" size="icon-xs">
+                    <HugeiconsIcon icon={Information} size={100}/>
+                </Button>
+            </Tooltip.Trigger>
+            <Tooltip.Content>
+                <div class="bg-bg">{obj.desc}</div>
+            </Tooltip.Content>
+        </Tooltip.Root>
+        <Button variant="outline" size="icon-xs" onclick={()=>resetInput(obj.py_name,default_value)}>
+            <HugeiconsIcon icon={Reload}/>
+        </Button>
     </div>
 </div>
 
 <style>
 .input-container {
+    position: relative;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: start;
-    padding: 4px 8px;
     color: #000;
-    max-width: max(320px, 28%);
-
-    label {
-        word-break: break-all;
-        font-size: .7rem;
-    }
+    max-width: max(320px, 100%);
 }
-.input {
-    display: flex;
-    flex-grow: 1;
-    align-items: center;
-    justify-content: start;
-    width: 100%;
-    background: none;
-    color: #000;
-    height: 1.5rem; 
-}
-input, button {
-    padding: 0;
-    background: none;
-    color: #000;
-    border: 1px solid #e2e8f0; 
-    height: 100%;
-    max-height: 100%;
-}
-
-.input-slider {
-    width: 100%;
-    cursor: pointer;    
-}
-input[type="range"]::-webkit-slider-runnable-track, 
-input[type="range"]::-moz-range-track {
-    background: #000;
-    border-radius: 0;
-}
-.input-number {
-    height: 100%;
-    width: 8ch;
-    font-size: 14px;
-}
-
-button { 
-    background: #fefefe; 
-    border-radius: 0; 
-    cursor: pointer; 
-    font-size: 1rem; 
-    padding: .3rem;
-    transition: background 0.2s; 
-}
-button:hover:not(:disabled) { 
-    background: #efefef; 
-}
-button:disabled { 
-    background: #94a3b8; 
-    cursor: not-allowed; 
+.input-buttons-container {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: grid;
+    grid-auto-rows: 2;
 }
 </style>

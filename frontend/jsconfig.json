@@ -1,4 +1,9 @@
 {
+  "files": [],
+  "references": [
+    { "path": "./jsconfig.app.json" },
+    { "path": ".jsconfig.node.json" }
+  ],
   "compilerOptions": {
     "moduleResolution": "bundler",
     "target": "ESNext",
@@ -23,7 +28,13 @@
      * Typecheck JS in `.svelte` and `.js` files by default.
      * Disable this if you'd like to use dynamic types.
      */
-    "checkJs": true
+    "checkJs": true,
+    // shadcn reqs
+    "baseUrl": ".",
+    "paths": {
+      "$lib": ["./src/lib"],
+      "$lib/*": ["./src/lib/*"]
+    }
   },
   /**
    * Use global.d.ts instead of compilerOptions.types

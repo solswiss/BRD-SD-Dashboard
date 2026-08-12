@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, abort
 from flask_cors import CORS
 import plotly.graph_objects as go
 import pysd
@@ -38,6 +38,7 @@ def init():
         max_val = float(row['Limits'][1]) if pd.notna(row['Limits'][1]) else (
             default * 2 if default > 1 else 1
         )
+        comment = row['Comment'] if pd.notna(row['Comment']) else 'No description.'
 
         all_variables[py_name] = {
             "py_name": py_name,
@@ -47,7 +48,8 @@ def init():
             "min": min_val,
             "max": max_val,
             "step": 0.05 if default <= 1 else 0.1,
-            "default": default
+            "default": default,
+            "desc": comment
         }
 
     with open('kpis.json', 'r') as file:
@@ -161,11 +163,12 @@ def get_kpi_plots():
     try:
         kpi_key = request.args.get('q')
         if not kpi_key or kpi_key not in kpis:
-            return jsonify({})
+            print('key=',kpi_key)
+            abort(400, description="Invalid KPI key")#return jsonify({})
         
         res = shared_state['results'].get('variables', {})
         if not res:
-            return jsonify({})
+            abort(500, description="Results (variables) unfound")#return jsonify({})
         
         fig = go.Figure()
         
@@ -203,14 +206,13 @@ def run_model(initial_time, final_time, time_step, inputs):
     """Execute PySD model with given parameters. Returns time series results."""
     overrides = {}
     stateful_overrides = {}
-    
+
     for py_name, value in inputs.items():
         var_type = all_variables[py_name].get('type')
         if var_type == 'Constant':
             overrides[py_name] = value
         elif var_type == 'Stateful':
             stateful_overrides[py_name] = value
-
     try:
         res = model.run(
             params=overrides,
@@ -223,12 +225,11 @@ def run_model(initial_time, final_time, time_step, inputs):
             "time": res.index.tolist(),
             "variables": {col: res[col].tolist() for col in res.columns}
         }
-        
         return res
         
     except Exception as e:
-        print(f"Error in run_model: {e}")
-        raise
+        print(f"Error in run_model: {str(e)}")
+        print("name is",type(e).__name__)
 
 
 @app.route('/api/simulate', methods=['POST'])
@@ -247,18 +248,16 @@ def simulate():
 
         results = {}
         for scenario_name, scenario_inputs in inputs_by_scenario.items():
-            try:
-                res = run_model(initial_time, final_time, time_step, scenario_inputs)
-                results[scenario_name] = {
-                    "time": res.index.tolist(),
-                    "variables": {col: res[col].tolist() for col in res.columns}
-                }
-            except Exception as e:
-                results[scenario_name] = {"error": str(e)}
-        
+            res = run_model(initial_time, final_time, time_step, scenario_inputs)
+            results[scenario_name] = {
+                "time": res.index.tolist(),
+                "variables": {col: res[col].tolist() for col in res.columns}
+            }
+        print("ok")
         return jsonify(results)
     
     except Exception as e:
+        print("erring out",str(e))
         return jsonify({"error": str(e)}), 400
 
 
@@ -296,7 +295,6 @@ def run_sensitivity_parametric(base_inputs, x_param, x_min, x_max, steps,
     for x_val in x_values:
         inputs = base_inputs.copy()
         inputs[x_param] = x_val
- 
         try:
             res_df = run_model(initial_time, final_time, time_step, inputs)
             # Time series: all time points for this X value

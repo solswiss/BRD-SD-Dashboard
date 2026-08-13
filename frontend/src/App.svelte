@@ -4,6 +4,7 @@
 	import { title, footnote } from '../settings.json';
 	import colors from '../colors.json';
 	import charts from '../charts.json';
+	import chroma from 'chroma-js'
 	import "carbon-components-svelte/css/white.css";
 	import InputField from '../components/Input.svelte';
 	import * as Tabs from "$lib/components/ui/tabs"
@@ -16,8 +17,9 @@
 	import { RangeSlider } from "carbon-components-svelte";
     import { Tooltip } from 'bits-ui';
     import { HugeiconsIcon } from '@hugeicons/svelte';
-    import { Add, CheckIcon, CoinsSwapIcon, Delete01Icon, FileExportIcon, FileImportIcon } from '@hugeicons/core-free-icons';
+    import { Add, CheckIcon, CoinsSwapIcon, Delete01Icon, Download, FileExportIcon, FileImportIcon, MoreHorizontalCircle02FreeIcons, MoreHorizontalCircle02Icon, MoreVerticalFreeIcons, MoreVerticalIcon, TestTube01Icon } from '@hugeicons/core-free-icons';
 	import { FileUploaderButton } from 'carbon-components-svelte';
+    import { Spinner } from '$lib/components/ui/spinner';
 
 	// Constants
 	const SCENARIO_BASELINE = 'Baseline';
@@ -27,7 +29,7 @@
 	const LINE_TYPES = ['solid', 'dashdot', 'dot'];
 	const SENSITIVITY_MODES = ['parametric', 'heatmap'];
 	const MIN_STEP_VALUE = 0.1;
-	const MAX_COMBINATIONS = 2500;
+	const STANDOFF = 20;
 
 	// State
 	let globals = $state({});
@@ -49,7 +51,7 @@
 	let labToggle = $state(false); //TODO: undo me
 	let labType = $state("scenario")
 	let ephScenario = $state(SCENARIO_BASELINE);
-	let newScenario = $state(undefined);
+	let newScenario = $state("");
 	let scenarios = { [SCENARIO_BASELINE]: { 'controls': {}, 'inputs': {} } };
 	let scenario = $state(SCENARIO_BASELINE);
 	let scenarioTaskComplete = $state(false);
@@ -62,10 +64,12 @@
 	let activeKpiGroup = $state('');
 
 	let loadingSimulation = $state(false);
+	let simulationOK = false;
 	let isInitializing = $state(true);
 	let scenarioChartContainer = $state(null)
 	let sensitivityChartContainer = $state(null);
 	let sensitivityChartContainer1 = $state(null);
+	let sensitivityOK = false;
 	let chartContainer = $state(null);
 	let loadingChart = $state(true);
 	let kpiContainer = $state(null);
@@ -89,10 +93,30 @@
 	let sensitivityError = $state('');
 
 	$effect(() => {
+		// syncs inputs (very important)
 		const snapshot = $state.snapshot(inputs);
 		scenarios[scenario]['inputs'] = snapshot;
 		if (selectedScenarios.length === 0) selectedScenarios = [SCENARIO_BASELINE];
 	});
+
+	$effect(()=>{
+		if (!isInitializing && Object.keys(constantVariables).length > 0) {
+			if (sensitivityXVariable !== 'time') {
+				sensitivityXRange.min = constantVariables[sensitivityXVariable].min
+				sensitivityXRange.max = constantVariables[sensitivityXVariable].max
+			}
+			if (sensitivityMode === 'heatmap' && sensitivityYVariable) {
+				sensitivityYRange.min = constantVariables[sensitivityYVariable].min
+				sensitivityYRange.max = constantVariables[sensitivityYVariable].max
+			}
+		}
+	})
+
+	// if (typeof window !== 'undefined') {
+	// 	window.setSkeleton = (val) => {
+	// 		loadingChart = true
+	// 	};
+	// }
 
 	onMount(async () => {
 		const mod = await import('plotly.js-dist-min');
@@ -162,8 +186,7 @@
 	async function fetchGlobals() {
 		try {
 			const data = await fetchWithCache('/api/globals');
-			globals = data.globals;
-			//console.debug('globals',globals)
+			globals = JSON.parse(data.globals);
 			kpiGroups = data.kpi_groups;
 			activeKpiGroup = kpiGroups[0];
 		} catch(err) {
@@ -200,7 +223,7 @@
 		}
 
 		const inputsDraft = Object.fromEntries(Object.entries(scenarios).map(([k, v]) => [k, v.inputs])); // runs for all scenarios
-
+		
 		try {
 			const response = await fetch('/api/simulate', {
 				method: 'POST',
@@ -213,18 +236,23 @@
 				})
 			});
 			const data = await response.json();
-
-			if (response.ok && data) {
+			console.debug('data is',data)
+			console.debug('response is',response.ok)
+			if (!response.ok) {
+				simulationOK = false
+				const errorData = await response.json().catch(() => ({}));
+				console.error("Error running simulation:",errorData || "???")
+			} else {
+				simulationOK = true
 				simulationResults = data;
 				if (target === 'scenario') renderScenarioChart()
 				else {
 					renderChart(event);
 					loadKpiPlots(event);
 				}
-			} else {
-				console.debug(data.error || "Simulation failed.");
 			}
 		} catch(err) {
+			simulationOK = false
 			errorMessage = "Could not communicate with backend.";
 			console.error(err);
 		} finally {
@@ -251,6 +279,11 @@
 	}
 
 	async function createScenario() {
+		if (newScenario === "" || !newScenario || newScenario.length === 0) {
+			console.debug('empty name',newScenario)
+			errorMessage = "Scenario name cannot be empty."
+			return
+		}
 		const snapshot = $state.snapshot(inputs);
 		scenarios[newScenario] = {
 			'controls': {
@@ -304,9 +337,11 @@
 
 	async function importScenario() {
 		try {
-			console.debug('file',scenarioImportFiles)
+			if (newScenario === "" || !newScenario || newScenario.length === 0) {
+				errorMessage = "Scenario name cannot be empty."
+				return
+			}
 			const file = scenarioImportFiles[0]
-			
 			if (!file) {
 				errorMessage = "No file uploaded"
 				console.debug(errorMessage)
@@ -314,7 +349,6 @@
 			}
 			const text = await file.text();
 			const data = JSON.parse(text);
-
 			scenarios[newScenario] = {
 				'controls': {
 					'initial_time': inputs.initial_time,
@@ -329,7 +363,7 @@
 			if (!selectedScenarios.includes(scenario)) selectedScenarios.push(scenario)
 			await runSimulation('import');
 		} catch {
-			errorMessage = "Failed to import scenario.";
+			errorMessage = "Failed to import file.";
 			console.debug(errorMessage)
 		}
 	}
@@ -386,7 +420,7 @@
 		}
 	}
 
-	function buildTrace(key, xData, vars, targetTracks, colors, lineType) {
+	function buildTrace(key, xData, vars, targetTracks, colors, lineType, showLegend=false) {
 		try {
 			return targetTracks.filter((track) => vars[track.key] !== undefined).map((track, i) => ({
 				x: xData,
@@ -396,7 +430,7 @@
 				name: `${key}: ${track.name}`,
 				line: { dash: lineType, color: track.color, width: 2.5 },
 				legendgroup: SCENARIO_BASELINE,
-				showlegend: false,
+				showlegend: showLegend,
 				marker: { color: colors ? colors[i] : null },
 				hoverlabel: {namelength:-1} // to avoid truncation
 			}));
@@ -406,7 +440,7 @@
 	}
 
 	async function renderChart(event) {
-		if (!Plotly || Object.keys(simulationResults[SCENARIO_BASELINE] || {}).length === 0 || !chartContainer) return;
+		if (!Plotly || !simulationOK || Object.keys(simulationResults[SCENARIO_BASELINE] || {}).length === 0 || !chartContainer) return;
 		console.debug('rendering from',event ? event.target : 'no event');
 		loadingChart = true
 
@@ -416,8 +450,6 @@
 		const colorsOverflow = COLOR_SCHEME.length / tracksLength >= Object.keys(scenarios).length;
 		const colorsUnderflow = COLOR_SCHEME.length < tracksLength;
 		let traces = [];
-		console.debug('selectedScenarios',selectedScenarios)
-		console.debug('targettracks',targetTracks)
 
 		try {
 			for (const [i, k] of Object.keys(scenarios).filter((k) => selectedScenarios.includes(k)).entries()) {
@@ -428,7 +460,7 @@
 			}
 		} catch (err) {
 			// intentional early exit
-			console.debug(err)
+			console.debug('RenderChart',err)
 			console.log('Exiting renderChart.')
 			return;
 		}
@@ -442,13 +474,14 @@
 		// TODO: check unified units
 		let yunits = await getUnits(chartValues[0]);
 		const layout = {
-			title: { text: chart, font: { size: 18 } },
-			xaxis: { title: { text: 'Time (Days)' }, gridcolor: '#f0f0f0' },
-			yaxis: { title: { text: yunits }, gridcolor: '#f0f0f0' },
+			title: { text: chart, font: { size: 18 }, standoff: STANDOFF },
+			xaxis: { title: { text: 'Time (Days)', standoff: STANDOFF }, gridcolor: '#f0f0f0', automargin: true },
+			yaxis: { title: { text: yunits, standoff: STANDOFF }, gridcolor: '#f0f0f0', automargin: true },
 			margin: { t: 50, b: 50, l: 60, r: 20 },
 			//hovermode: 'x unified',
 			plot_bgcolor: '#ffffff',
 			paper_bgcolor: '#ffffff',
+			autosize: true,
 			legend: {
 				orientation: 'h',
 				yanchor: 'top',
@@ -464,7 +497,8 @@
 			modeBarButtonsToRemove: ['select2d', 'lasso2d']
 		};
 
-		Plotly.newPlot(chartContainer, traces, layout, config, { responsive: true });
+		if (isInitializing) Plotly.newPlot(chartContainer, traces, layout, config);
+		else Plotly.react(chartContainer, traces, layout, config);
 		loadingChart = false
 	}
 
@@ -480,7 +514,7 @@
 
 	async function renderScenarioChart() {
 		//selectedScenarioTestingVariables
-		if (!Plotly || Object.keys(simulationResults[SCENARIO_BASELINE] || {}).length === 0 || !scenarioChartContainer) return;
+		if (!Plotly || !simulationOK || Object.keys(simulationResults[SCENARIO_BASELINE] || {}).length === 0 || !scenarioChartContainer || selectedScenarioTestingVariables.length === 0) return;
 		const results = $state.snapshot(simulationResults)
 		const vars = $state.snapshot(selectedScenarioTestingVariables)
 		const targetTracks = vars.map(v => ({key: v, name: v}));
@@ -488,16 +522,13 @@
 		const colorsOverflow = COLOR_SCHEME.length / tracksLength >= Object.keys(scenarios).length;
 		const colorsUnderflow = COLOR_SCHEME.length < tracksLength;
 		let traces = [];
-		console.debug('selectedScenarios',selectedScenarios)
-		console.debug('selectedScenarioTestingVariables',selectedScenarioTestingVariables)
-		console.debug('scen targettracks',targetTracks)
 
 		try {
 			for (const [i, k] of Object.keys(scenarios).filter((k) => selectedScenarios.includes(k)).entries()) {
 				if (!results[k]) continue;
-				if (colorsUnderflow) traces.push(...buildTrace(k, results[k].time, results[k].variables, targetTracks, LINE_TYPES[i % tracksLength])); 
-				else if (colorsOverflow) traces.push(...buildTrace(k, results[k].time, results[k].variables, targetTracks, COLOR_SCHEME.slice(i * tracksLength, tracksLength), LINE_TYPES[0])); 
-				else traces.push(...buildTrace(k, results[k].time, results[k].variables, targetTracks, COLOR_SCHEME, LINE_TYPES[i % tracksLength]));
+				if (colorsUnderflow) traces.push(...buildTrace(k, results[k].time, results[k].variables, targetTracks, LINE_TYPES[i % tracksLength], true)); 
+				else if (colorsOverflow) traces.push(...buildTrace(k, results[k].time, results[k].variables, targetTracks, COLOR_SCHEME.slice(i * tracksLength, tracksLength), LINE_TYPES[0], true)); 
+				else traces.push(...buildTrace(k, results[k].time, results[k].variables, targetTracks, COLOR_SCHEME, LINE_TYPES[i % tracksLength], true));
 			}
 		} catch (err) {
 			// intentional early exit
@@ -515,9 +546,9 @@
 		// TODO: check unified units
 		let yunits = await getUnits(selectedScenarioTestingVariables[0]);
 		const layout = {
-			title: { text: chart, font: { size: 18 } },
-			xaxis: { title: { text: 'Time (Days)' }, gridcolor: '#f0f0f0' },
-			yaxis: { title: { text: yunits }, gridcolor: '#f0f0f0' },
+			title: { text: chart, font: { size: 18 }, standoff: STANDOFF },
+			xaxis: { title: { text: 'Time (Days)', standoff: STANDOFF }, gridcolor: '#f0f0f0', automargin: true },
+			yaxis: { title: { text: yunits, standoff: STANDOFF }, gridcolor: '#f0f0f0', automargin: true },
 			margin: { t: 50, b: 50, l: 60, r: 20 },
 			//hovermode: 'x unified',
 			plot_bgcolor: '#ffffff',
@@ -538,7 +569,6 @@
 		};
 
 		Plotly.newPlot(scenarioChartContainer, traces, layout, config, { responsive: true });
-		loadingChart = false
 	}
 
 	// Update sensitivity mode and reset variable selections
@@ -553,6 +583,7 @@
 
 		if (Plotly) {
 			console.debug('purging')
+			Plotly.purge(scenarioChartContainer)
 			Plotly.purge(sensitivityChartContainer);
 			Plotly.purge(sensitivityChartContainer1);
 		}
@@ -562,13 +593,11 @@
 	function validateAndNormalizeRange(min, max, variableName) {
 		if (min === null || max === null) {
 			sensitivityError = `${variableName} requires both min and max values`;
-
 			return null;
 		}
 
 		if (min >= max) {
 			sensitivityError = `${variableName} min must be less than max`;
-
 			return null;
 		}
 
@@ -576,6 +605,7 @@
 		const maxStep = getMaximumStep(range);
 
 		if (sensitivityStep > maxStep) {
+			errorMessage = "Partition count has been limited to "+maxStep
 			sensitivityStep = maxStep;
 		}
 
@@ -587,21 +617,7 @@
 		if (sensitivityStep <= 0) {
 			throw Error('Sensitivity step must be greater than zero.');
 		}
-
 		return sensitivityStep;
-	}
-
-	// Validate total combinations don't exceed limit
-	function validateTotalCombinations(xSteps, ySteps = 1) {
-		const total = xSteps * ySteps;
-
-		if (total > MAX_COMBINATIONS) {
-			sensitivityError = `Total combinations (${total}) exceeds limit (${MAX_COMBINATIONS}). Reduce precision.`;
-
-			return false;
-		}
-
-		return true;
 	}
 
 	// Calculate maximum step size for a given range
@@ -618,10 +634,8 @@
 		// Validate Y variable (required for all modes)
 		if (!sensitivityYVariable) {
 			sensitivityError = 'Y-axis/dependent variable is required';
-
 			return null;
 		}
-
 		yVarName = sensitivityYVariable;
 
 		if (sensitivityMode === 'heatmap') {
@@ -629,7 +643,6 @@
 			yRange = validateAndNormalizeRange(sensitivityYRange.min, sensitivityYRange.max, yVarName);
 
 			if (!yRange) return null;
-			if (!validateTotalCombinations(steps, steps)) return null;
 
 			return {
 				mode: 'heatmap',
@@ -646,14 +659,10 @@
 		} else {
 			// Parametric: sweep only X (or time if X is not specified)
 			xVarName = sensitivityXVariable || 'time';
-
 			if (xVarName !== 'time') {
 				xRange = validateAndNormalizeRange(sensitivityXRange.min, sensitivityXRange.max, xVarName);
-
 				if (!xRange) return null;
 			}
-
-			if (!validateTotalCombinations(steps)) return null;
 
 			const varDef = xVarName === 'time'
 				? { min: inputs.initial_time, max: inputs.final_time, steps }
@@ -670,10 +679,9 @@
 	async function runSensitivityAnalysis() {
 		sensitivityError = '';
 		sensitivityStatus = 'running';
-
 		const paramGrid = buildParameterGrid();
-
 		if (!paramGrid) {
+			errorMessage = "Missing required parameters."
 			sensitivityStatus = 'idle';
 			return;
 		}
@@ -690,16 +698,29 @@
 			});
 
 			const data = await response.json();
+			console.debug('sens data',data)
 			if (data.error) {
-				sensitivityError = data.error || 'sens err'
+				sensitivityOK = false
+				sensitivityError = data.error || 'Error running sensitivity analysis'
 				console.debug('put me on the screen:',data.error)
 				sensitivityStatus = 'idle';
 				return
 			}
-			if (response.ok) {
-				sensitivityResults = data;
+			try {
+				if (!response.ok) {
+					sensitivityOK = false
+					sensitivityError = data.error || 'Error running sensitivity analysis'
+				} else {
+					sensitivityResults = data;
+					sensitivityOK = true
+					renderSensitivityChart();
+				}
+			} catch (err) {
+				sensitivityOK = false
+				sensitivityError = data.error || 'Error running sensitivity analysis'
+				console.error(err)
+			} finally {
 				sensitivityStatus = 'done';
-				renderSensitivityChart();
 			}
 		} catch(err) {
 			sensitivityError = 'Could not communicate with backend';
@@ -710,7 +731,7 @@
 
 	// Render sensitivity results based on mode
 	function renderSensitivityChart() {
-		if (!sensitivityResults || !Plotly) return;
+		if (!sensitivityOK || !sensitivityResults || !Plotly || !sensitivityChartContainer) return;
 
 		if (sensitivityMode === 'heatmap') {
 			renderSensitivityHeatmap();
@@ -726,7 +747,7 @@
 			type: 'scatter',
 			mode: 'lines+markers',
 			name: `${yVar} vs ${xVar}`,
-			line: { color: '#000', width: 3 },
+			line: { color: COLOR_SCHEME[0], width: 3 },
 			marker: { size: 8 }
 		};
 
@@ -735,10 +756,11 @@
 
 		const layout = {
 			hovermode: 'closest',
-			title: { text: `${realX} vs ${realY}` },
-			xaxis: { title: { text: realX } },
-			yaxis: { title: { text: realY } },
-			margin: { l: margin, r: margin, t: margin, b: margin }
+			title: { text: `${realX} vs ${realY}`, standoff: STANDOFF },
+			xaxis: { title: { text: realX, standoff: STANDOFF }, automargin: true },
+			yaxis: { title: { text: realY, standoff: STANDOFF }, automargin: true },
+			margin: { l: margin, r: margin, t: margin, b: margin },
+			autosize: true,
 		};
 
 		const config = {
@@ -746,7 +768,6 @@
 			displaylogo: false,
 			modeBarButtonsToRemove: ['select2d', 'lasso2d']
 		};
-
 		Plotly.newPlot(sensitivityChartContainer1, [summaryTrace], layout, config);
 	}
 
@@ -754,7 +775,8 @@
 	function renderSensitivityParametric() {
 		const xVar = sensitivityXVariable;
 		const yVar = sensitivityYVariable;
-
+		const color = chroma(COLOR_SCHEME[0])
+		const colors = chroma.scale([color.darken(2.8), color.brighten(2.8)]).colors(sensitivityStep)
 		// Build N traces (one per X parameter value, showing Y vs time)
 		const timeSeriesTraces = sensitivityResults.time_series.map((series, idx) => ({
 			x: series.time,
@@ -762,10 +784,7 @@
 			type: 'scatter',
 			mode: 'lines',
 			name: `${series.x_param_value.toFixed(2)}`,
-			line: { color: COLOR_SCHEME[idx % COLOR_SCHEME.length], width: 1.5 }
-
-			//xaxis: 'Time (days)',
-			//yaxis: yVar,
+			line: { color: colors[idx], width: 1.5 }
 		}));
 
 		const realY = getRealName(sensitivityResults.y_variable);
@@ -773,10 +792,11 @@
 
 		const layout = {
 			hovermode: 'closest',
-			title: { text: `Sensitivity — ${realY}` },
-			xaxis: { title: { text: 'Time' } },
-			yaxis: { title: { text: realY } },
-			margin: { l: margin, r: margin, t: margin, b: margin }
+			title: { text: `Sensitivity — ${realY}`, standoff: STANDOFF },
+			xaxis: { title: { text: 'Time', standoff: STANDOFF }, automargin: true },
+			yaxis: { title: { text: realY, standoff: STANDOFF }, automargin: true },
+			margin: { l: margin, r: margin, t: margin, b: margin },
+			autosize: true,
 		};
 
 		const config = {
@@ -816,10 +836,11 @@
 		const realY = getRealName(sensitivityResults.y_variable);
 
 		const layout = {
-			title: { text: `${realX} and ${realY}` },
-			xaxis: { title: { text: realX } },
-			yaxis: { title: { text: realY } },
-			margin: { l: margin, r: margin, t: margin, b: margin }
+			title: { text: `${realX} and ${realY}`, standoff: STANDOFF },
+			xaxis: { title: { text: realX, standoff: STANDOFF }, automargin: true },
+			yaxis: { title: { text: realY, standoff: STANDOFF }, automargin: true },
+			margin: { l: margin, r: margin, t: margin, b: margin },
+			autosize: true,
 		};
 
 		const config = {
@@ -844,9 +865,9 @@
 
 </script>
 
-{#if errorMessage}
+<!-- {#if errorMessage}
 	<p class="error">{errorMessage}</p>
-{/if}
+{/if} -->
 
 <div id="screen-zero" hidden={!isInitializing && connected}>
 	<div class="w-full">
@@ -869,7 +890,7 @@
 			<span id="brand-title" class="!text-[1.2rem] !font-medium">{title}</span>
 		</div>
 		<div class="nav-options-wrapper">
-			<Button onclick={() => {labToggle=!labToggle;if(!labToggle)runSimulation()}}>Lab</Button>
+			<Button variant={labToggle?"outline":"default"} onclick={()=>{labToggle=!labToggle;if(!labToggle)runSimulation()}}>{labToggle?"Return":"Lab"}</Button>
 		</div>
 	</div>
 </nav>
@@ -879,12 +900,12 @@
 		<div id="lab-page" class="main-page">
 			<div class="main-display">
 				<div class="main-display-wrapper">
-					{#if labType==='sensitivity' && sensitivityResults}
-						<div class="sensitivity-chart" bind:this={sensitivityChartContainer}></div>
-						<div class="sensitivity-chart" bind:this={sensitivityChartContainer1}></div>
-					{:else if labType==='scenario' && simulationResults}
-						<div class="scenario-chart" bind:this={scenarioChartContainer}></div>
-					{/if}
+				<!-- {#if labType==='sensitivity'} -->
+					<div hidden={labType!=='sensitivity'} class="sensitivity-chart !w-full" bind:this={sensitivityChartContainer}></div>
+					<div hidden={labType!=='sensitivity'} class="sensitivity-chart !w-full" bind:this={sensitivityChartContainer1}></div>
+				<!-- {:else if labType==='scenario'} -->
+					<div hidden={labType!=='scenario'} class="scenario-chart" bind:this={scenarioChartContainer}></div>
+				<!-- {/if} -->
 				</div>
 			</div>
 
@@ -924,7 +945,7 @@
 								<div class="grid items-center gap-[.2rem]">
 									<Label for="import-file">Import Scenario</Label>
 									<div class="flex h-full">
-										<FileUploaderButton labelText="Add file" id="import-file" bind:files={scenarioImportFiles} onchange={()=>{if(!scenarioImportFiles)console.debug('is this an issue')}} type="file" accept=".json" />
+										<FileUploaderButton labelText="Add file" id="import-file" bind:files={scenarioImportFiles} type="file" accept=".json" />
 										<Input id="import-scenario" class="!w-full h-full" type="text" placeholder="New scenario" bind:value={newScenario}/>
 										<Button class="border-none h-full" size="icon" onclick={importScenario}>
 											{#if scenarioImportComplete}
@@ -978,7 +999,7 @@
 									<Select.Root type="single"
 										id="sensitivity-z-var"
 										bind:value={sensitivityZVariable}>
-										<Select.Trigger>{sensitivityZVariable ?? "Select a Z variable"}</Select.Trigger>
+										<Select.Trigger class="!w-full">{sensitivityZVariable ?? "Select a Z variable"}</Select.Trigger>
 										<Select.Content class="z-[99] max-h-[10rem]">
 											{#each Object.entries(statefulVariables) as [pyName, varData]}
 												<Select.Item value={pyName} label={varData.real_name}>{varData.real_name}</Select.Item>
@@ -991,18 +1012,18 @@
 									<Select.Root type="single"
 										id="sensitivity-y-var"
 										bind:value={sensitivityYVariable}>
-										<Select.Trigger>{sensitivityYVariable ?? "Select a Y variable"}</Select.Trigger>
+										<Select.Trigger class="!w-full">{sensitivityYVariable ?? "Select a Y variable"}</Select.Trigger>
 										<Select.Content class="z-[99] max-h-[10rem]">
 											{#each Object.entries(constantVariables) as [pyName, varData]}
-												<Select.Item value={pyName}>{varData.real_name}</Select.Item>
+												<Select.Item value={pyName} label={varData.real_name}>{varData.real_name}</Select.Item>
 											{/each}
 										</Select.Content>
 									</Select.Root>
 								</div>
 								{#if sensitivityYVariable && sensitivityYVariable !== 'time'}
 								<div class="grid items-center gap-[.2rem]">
-									<Label>{sensitivityYVariable} range</Label>
-									<RangeSlider hideTextInput labelText={sensitivityYVariable} bind:value={sensitivityYRange.min} bind:valueUpper={sensitivityYRange.max} min={inputs[sensitivityYVariable].min ?? 0} max={inputs[sensitivityYVariable].max ?? 1} step={inputs[sensitivityYVariable].step ?? .1}/>
+									<!-- <Label>{sensitivityYVariable} range</Label> -->
+									<RangeSlider hideTextInput labelText={`${getRealName(sensitivityYVariable)} range`} bind:value={sensitivityYRange.min} bind:valueUpper={sensitivityYRange.max} min={constantVariables[sensitivityYVariable]["min"] ?? 0} max={constantVariables[sensitivityYVariable]["max"] ?? 1} step={constantVariables[sensitivityYVariable]["step"] ?? .1}/>
 								</div>
 								{/if}
 							{:else}
@@ -1011,10 +1032,10 @@
 								<Select.Root type="single"
 									id="sensitivity-y-var"
 									bind:value={sensitivityYVariable}>
-									<Select.Trigger>{sensitivityYVariable ?? "Select a Y variable"}</Select.Trigger>
+									<Select.Trigger class="!w-full">{sensitivityYVariable ?? "Select a Y variable"}</Select.Trigger>
 									<Select.Content class="z-[99] max-h-[10rem]">
 										{#each Object.entries(statefulVariables) as [pyName, varData]}
-											<Select.Item value={pyName}>{varData.real_name}</Select.Item>
+											<Select.Item value={pyName} label={varData.real_name}>{varData.real_name}</Select.Item>
 										{/each}
 									</Select.Content>
 								</Select.Root>
@@ -1026,10 +1047,10 @@
 								<Select.Root type="single"
 									id="sensitivity-x-var"
 									bind:value={sensitivityXVariable}>
-									<Select.Trigger>{sensitivityXVariable ?? "Select a X variable"}</Select.Trigger>
+									<Select.Trigger class="!w-full">{sensitivityXVariable ?? "Select a X variable"}</Select.Trigger>
 									<Select.Content class="z-[99] max-h-[10rem]">
 										{#each Object.entries(constantVariables) as [pyName, varData]}
-											<Select.Item value={pyName}>{varData.real_name}</Select.Item>
+											<Select.Item value={pyName} label={varData.real_name}>{varData.real_name}</Select.Item>
 										{/each}
 									</Select.Content>
 								</Select.Root>
@@ -1037,12 +1058,12 @@
 							
 							{#if sensitivityXVariable !== 'time'}
 							<div class="grid items-center gap-[.2rem]">
-								<Label>{sensitivityXVariable} range</Label>
-								<RangeSlider hideTextInput labelText={sensitivityXVariable} bind:value={sensitivityXRange.min} bind:valueUpper={sensitivityXRange.max} min={inputs[sensitivityXVariable].min ?? 0} max={inputs[sensitivityXVariable].max ?? 1} step={inputs[sensitivityXVariable].step ?? .1}/>
+								<!-- <Label>{sensitivityXVariable} range</Label> -->
+								<RangeSlider hideTextInput labelText={`${getRealName(sensitivityXVariable)} range`} bind:value={sensitivityXRange.min} bind:valueUpper={sensitivityXRange.max} min={constantVariables[sensitivityXVariable]["min"] ?? 0} max={constantVariables[sensitivityXVariable]["max"] ?? 1} step={constantVariables[sensitivityXVariable]["step"] ?? .1}/>
 							</div>
 							{/if}	
 							<div class="grid items-center gap-[.2rem]">
-								<Label for="sensitivity-step">Partitions</Label>
+								<Label for="sensitivity-step">Partition Count</Label>
 								<Input id="sensitivity-step" class="input-number"
 									type="number"
 									inputmode="numeric"
@@ -1053,12 +1074,19 @@
 									bind:value={sensitivityStep}
 								/>
 							</div>
-							<div class="grid items-center gap-[.2rem]">
-								<Button disabled={sensitivityStatus !== 'done' || !sensitivityResults} onclick={downloadSensitivityResults}>Download Results</Button>
+							<div class="grid grid-cols-2 items-center gap-[.2rem]">
+								<Button disabled={!sensitivityOK} onclick={downloadSensitivityResults}>
+									<HugeiconsIcon icon={Download}/>
+									Download
+								</Button>
 								<Button
 									onclick={runSensitivityAnalysis}
 									disabled={sensitivityStatus === 'running'}
-									>{sensitivityStatus === 'running' ? 'Running...' : 'Run Sensitivity Analysis'}</Button>
+									>
+									{#if sensitivityStatus==='running'}<Spinner/>
+									{:else}<HugeiconsIcon icon={TestTube01Icon}/>{/if}
+									{sensitivityStatus === 'running' ? 'Running...' : 'Run'}
+								</Button>
 							</div>
 						</Tabs.Content>
 					</Tabs.Root>
@@ -1200,17 +1228,23 @@
 	</section>
 
 	<section class="displays">
+		<div class="flex flex-row align-center max-w-[80%] !pt-3">
+			<div class="flex flex-row gap-1 flex-shrink-1 !p-1 !bg-input rounded-l">
+				Active scenarios
+				<HugeiconsIcon icon={MoreVerticalIcon} size="16" onclick={()=>labToggle=true}/>
+			</div>
+			<div class="flex-grow-1 !p-1 overflow-x-auto !border !border-input rounded-r">{selectedScenarios.join(", ")}</div>
+		</div>
 		<section class="displays-wrapper">
 			<section
 				class="chart chart-wrapper relative"
-				class:hidden={!simulationResults}
+				// class:hidden={!simulationResults}
+				class:skeleton={loadingChart || !simulationResults}
 			>
-				<div class="loading-skeleton" disabled={loadingChart}></div>
-				<div bind:this={chartContainer} class="plotly-target"></div>
+				<div hidden={loadingChart || !simulationResults} bind:this={chartContainer} class="plotly-target"></div>
 			</section>
 			<section bind:this={kpiContainer} class="kpi-wrapper"></section>
 		</section>
-		<div class="w-full !py-4">Active scenarios: {selectedScenarios.join(", ")}</div>
 	</section>
 
 	<Tooltip.Provider>
@@ -1307,7 +1341,7 @@ footer {
 nav {
 	position: fixed;
 	width: 100vw;
-	height: 3.2rem;
+	height: var(--nav-height);
 	z-index: 99;
 	background: #fff;
 }
@@ -1315,7 +1349,7 @@ nav {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: .6rem .8rem;
+	padding: .6rem 1.2rem;
 }
 nav .brand {
 	display: flex;
@@ -1343,10 +1377,18 @@ nav .nav-options-wrapper {
 	margin: 4px !important;
 }
 .multiselect :global(li) {
+	background-color: #0f62fe;
 	padding: .25rem .35rem;
 	&:hover {
-		background-color: #ff0;
+		background-color: #0353e9;
 	}
+}
+.multiselect >:global(div) {
+	background-color: color-mix(in oklab, var(--input) 20%, transparent);
+	border: 1px solid var(--input);
+}
+.multiselect :global(svg) {
+	fill: var(--primary);
 }
 
 .main-sidebar {
@@ -1362,6 +1404,16 @@ nav .nav-options-wrapper {
 	grid-area: display;
 	height: 100%;
 	width: 100%;
+	overflow: scroll;
+}
+.main-display-wrapper {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+	padding: 1rem;
+	height: auto;
+	width: 100%;
+	max-width: 100%;
 }
 
 .sensitivity-chart {
@@ -1370,12 +1422,7 @@ nav .nav-options-wrapper {
 	max-width: 100%;
 }
 
-.loading-skeleton:disabled {
-	position: absolute;
-	top: 0;
-	left: 0;
-	width: 100%;
-	height: 100%;
+.skeleton {
 	background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
 	background-size: 200% 100%;
 	animation: shimmer 1.5s infinite;
@@ -1395,12 +1442,11 @@ nav .nav-options-wrapper {
 	background: white;
 	font-size: 16px;
 	color: #000;
-	padding-top: 2.75rem;
 	display: grid;
 	grid-template-columns: 20% 80%;
 	grid-template-areas: "globals displays" "inputs inputs";
 	gap: 0;
-	padding: 3em 0;
+	padding: var(--nav-height) 0 3em 0;
 	> * {
 		background: white;
 	}
@@ -1432,11 +1478,12 @@ nav .nav-options-wrapper {
 }
 
 .displays {
-	grid-area: displays;	
+	grid-area: displays;
 }
 .displays-wrapper {
 	display: grid;
-	grid-template-columns: 70% 30%;
+	grid-template-columns: 80% 20%;
+	padding: .5rem;
 }
 
 .chart-wrapper {
@@ -1459,7 +1506,8 @@ nav .nav-options-wrapper {
 
 .inputs {
 	grid-area: inputs;
-	padding: 12px;
+	padding: .5rem;
+	margin-top: 1rem;
 }
 
 button.domain-header {

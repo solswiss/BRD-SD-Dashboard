@@ -3,7 +3,7 @@
     import Button from "$lib/components/button.svelte";
     import { Tooltip } from "bits-ui";
     import { HugeiconsIcon } from "@hugeicons/svelte";
-    import { Information, InformationCircleIcon, Reload } from "@hugeicons/core-free-icons";
+    import { Information, InformationCircleIcon, Refresh01Icon, Reload } from "@hugeicons/core-free-icons";
     let {obj, obj_of_inputs = $bindable(), default_value = obj.default, func, resetInput } = $props();
     let labelText = $derived(`${obj.real_name} = ${obj_of_inputs.toFixed(2)}`)
 </script>
@@ -22,7 +22,7 @@
             </Tooltip.Content>
         </Tooltip.Root>
         <Button variant="outline" size="icon-xs" onclick={()=>resetInput(obj.py_name,default_value)}>
-            <HugeiconsIcon icon={Reload}/>
+            <HugeiconsIcon icon={Refresh01Icon}/>
         </Button>
     </div>
 </div>

@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "carbon-components-svelte": "^0.110.2",
+    "chroma-js": "^3.2.0",
     "plotly.js-dist-min": "^3.7.0",
     "svelte-multiselect": "^11.8.0"
   }

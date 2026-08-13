@@ -44,6 +44,7 @@
 	});
 
 	let simulationResults = $state({});
+	let connected = $state(false)
 	let errorMessage = $state("");
 	let labToggle = $state(false); //TODO: undo me
 	let labType = $state("scenario")
@@ -93,35 +94,6 @@
 		if (selectedScenarios.length === 0) selectedScenarios = [SCENARIO_BASELINE];
 	});
 
-	// $effect(() => {
-	// 	if (labToggle) {
-	// 		console.debug('lab',labToggle)
-	// 		console.debug('mode',sensitivityMode)
-			
-	// 		if (sensitivityXVariable !== 'time') {
-	// 			const sensX = constantVariables[sensitivityXVariable];
-	// 			sensitivityXRange.min = sensX.min;
-	// 			sensitivityXRange.max = sensX.max;
-	// 		}
-
-	// 		if (sensitivityYVariable && sensitivityMode === 'heatmap') {
-	// 			try {
-	// 				const sensY = constantVariables[sensitivityYVariable];
-
-	// 				sensitivityYRange.min = sensY.min;
-	// 				sensitivityYRange.max = sensY.max;
-	// 			} catch(err) {
-	// 				console.error(err);
-	// 			}
-	// 		}
-	// 	}
-	// })
-
-	// $effect(() => {
-	// 	console.debug(`loading ${chart}?`,$state.snapshot(loadingChart))
-	// })
-
-
 	onMount(async () => {
 		const mod = await import('plotly.js-dist-min');
 
@@ -132,11 +104,15 @@
 			fetchBaseline(),
 			fetchDomains()
 		]);
-
 		// for some, order matters -- could just merge all
 		await fetchGlobals();
 		await setInputs();
 		await runSimulation();
+
+		if (!errorMessage) connected = true
+		else return
+		console.debug(isInitializing,'connected',connected)
+
 		isInitializing = false;
 		loadingChart = false;
 	});
@@ -144,7 +120,6 @@
 	async function fetchMetadata() {
 		try {
 			const data = await fetchWithCache('/api/metadata');
-
 			statefulVariables = { ...data.statefuls };
 			constantVariables = { ...data.constants };
 		} catch(err) {
@@ -169,8 +144,6 @@
 			}
 		} catch(err) {
 			errorMessage = `Failed to fetch from ${url}`;
-			isInitializing = false;
-
 			throw err;
 		}
 	}
@@ -190,7 +163,7 @@
 		try {
 			const data = await fetchWithCache('/api/globals');
 			globals = data.globals;
-			console.debug('globals',globals)
+			//console.debug('globals',globals)
 			kpiGroups = data.kpi_groups;
 			activeKpiGroup = kpiGroups[0];
 		} catch(err) {
@@ -202,7 +175,6 @@
 	async function fetchDomains() {
 		try {
 			const data = await fetchWithCache('/api/domains');
-
 			domains = data;
 			views = ["All Views", ...Object.keys(domains)];
 		} catch(err) {
@@ -496,55 +468,15 @@
 		loadingChart = false
 	}
 
+	function goToMain() {
+		console.debug("going to main")
+		labToggle = false
+	}
+
 	// ============ SENSITIVITY TESTING FUNCTIONS ============
 	async function runScenarioTest(event) {
 		runSimulation(event, 'scenario')
 	}
-	// async function runScenarioTest(event) {
-	// 	console.debug('running from',event ? event.target : 'no event');
-	// 	if (Object.keys(inputs).length < Object.keys(constantVariables).length) {
-	// 		console.log('Exiting runSimulation: inputs not ready.')
-	// 		return
-	// 	}
-	// 	loadingSimulation = true;
-	// 	errorMessage = "";
-
-	// 	let finalTime = inputs.final_time;
-	// 	const initialTime = inputs.initial_time;
-
-	// 	if (finalTime <= initialTime) {
-	// 		finalTime = initialTime + 1;
-	// 	}
-
-	// 	const inputsDraft = Object.fromEntries(Object.entries(scenarios).map(([k, v]) => [k, v.inputs]));
-
-	// 	try {
-	// 		const response = await fetch('/api/simulate', {
-	// 			method: 'POST',
-	// 			headers: { 'Content-Type': 'application/json' },
-	// 			body: JSON.stringify({
-	// 				initialTime,
-	// 				finalTime,
-	// 				timeStep: inputs.time_step,
-	// 				inputs: inputsDraft
-	// 			})
-	// 		});
-	// 		const data = await response.json();
-
-	// 		if (response.ok && data) {
-	// 			simulationResults = data;
-	// 			renderChart(event);
-	// 			loadKpiPlots(event);
-	// 		} else {
-	// 			console.debug(data.error || "Simulation failed.");
-	// 		}
-	// 	} catch(err) {
-	// 		errorMessage = "Could not communicate with backend.";
-	// 		console.error(err);
-	// 	} finally {
-	// 		loadingSimulation = false;
-	// 	}
-	// }
 
 	async function renderScenarioChart() {
 		//selectedScenarioTestingVariables
@@ -916,9 +848,26 @@
 	<p class="error">{errorMessage}</p>
 {/if}
 
+<div id="screen-zero" hidden={!isInitializing && connected}>
+	<div class="w-full">
+		<img src="https://images.emojiterra.com/google/noto-emoji/animated-emoji/1f42e.gif" alt="GIF of cow eating">
+		<div class="flex !flex-col w-full">
+			{#if !isInitializing && !connected}
+			<span class="!text-lg !font-medium text-destructive">{errorMessage ?? "Failed to connect with server"}</span>
+			<span class="!text-sm">Please try again in a few moments.</span>
+			{:else}
+			<span class="!text-lg">Loading...</span>
+			{/if}
+		</div>
+	</div>
+</div>
+
 <nav>
 	<div class="nav-wrapper">
-		<div class="brand"><span>LOGO</span><span>{title}</span></div>
+		<div class="brand">
+			<button class="cursor-pointer" onclick={goToMain}><img id="brand-logo" src="https://images.icon-icons.com/1507/PNG/512/preferencesdesktoplocale_103779.png" alt="globe icon"></button>
+			<span id="brand-title" class="!text-[1.2rem] !font-medium">{title}</span>
+		</div>
 		<div class="nav-options-wrapper">
 			<Button onclick={() => {labToggle=!labToggle;if(!labToggle)runSimulation()}}>Lab</Button>
 		</div>
@@ -929,7 +878,6 @@
 	{#if labToggle}
 		<div id="lab-page" class="main-page">
 			<div class="main-display">
-				<!-- <div class="main-display-wrapper" class:hidden={!sensitivityResults}> -->
 				<div class="main-display-wrapper">
 					{#if labType==='sensitivity' && sensitivityResults}
 						<div class="sensitivity-chart" bind:this={sensitivityChartContainer}></div>
@@ -1320,6 +1268,31 @@
 <footer>{footnote}</footer>
 
 <style>
+#screen-zero {
+	position: fixed;
+	left: 0;
+	top: 0;
+	height: 100vh;
+	width: 100vw;
+	background-color: #fff;
+	z-index: 110;
+	>div {
+		position: absolute;
+		left: 3rem;
+		bottom: 2.4rem;
+		height: 6rem;
+		z-index: 111;
+		display: flex;
+		flex-direction: row;
+		align-items: flex-end;
+		gap: 2rem;
+		img {
+			height: 6rem;
+		}
+	}
+	
+}
+
 footer {
 	padding: .5rem .8rem;
 }
@@ -1334,20 +1307,23 @@ footer {
 nav {
 	position: fixed;
 	width: 100vw;
-	height: 2.75rem;
+	height: 3.2rem;
 	z-index: 99;
 	background: #fff;
 }
-
 .nav-wrapper {
 	display: flex;
+	align-items: center;
 	justify-content: space-between;
-	padding: .8rem;
+	padding: .6rem .8rem;
 }
-
 nav .brand {
 	display: flex;
+	align-items: center;
 	gap: 24px;
+	#brand-logo {
+		height: 2rem;
+	}
 }
 
 nav .nav-options-wrapper {
@@ -1365,6 +1341,12 @@ nav .nav-options-wrapper {
 .multiselect :global(ul.selected li) {
 	padding: .2rem .35rem;
 	margin: 4px !important;
+}
+.multiselect :global(li) {
+	padding: .25rem .35rem;
+	&:hover {
+		background-color: #ff0;
+	}
 }
 
 .main-sidebar {

@@ -14,12 +14,10 @@
 	import * as Select from "$lib/components/ui/select";
 	import MultiSelect from 'svelte-multiselect';
 	import { RangeSlider } from "carbon-components-svelte";
-	// import { Input } from "flowbite-svelte"
     import { Tooltip } from 'bits-ui';
-    import InputGroup from '$lib/components/ui/input-group/input-group.svelte';
     import { HugeiconsIcon } from '@hugeicons/svelte';
-    import { Add, AddIcon, Check, CheckIcon, CoinsSwapIcon, Delete01Icon, Send } from '@hugeicons/core-free-icons';
-    import { Checkbox } from '$lib/components/ui/checkbox';
+    import { Add, CheckIcon, CoinsSwapIcon, Delete01Icon, FileExportIcon, FileImportIcon } from '@hugeicons/core-free-icons';
+	import { FileUploaderButton } from 'carbon-components-svelte';
 
 	// Constants
 	const SCENARIO_BASELINE = 'Baseline';
@@ -47,19 +45,24 @@
 
 	let simulationResults = $state({});
 	let errorMessage = $state("");
-	let labToggle = $state(false);
+	let labToggle = $state(false); //TODO: undo me
 	let labType = $state("scenario")
-	let inputScenarioName = $state('10A');
 	let ephScenario = $state(SCENARIO_BASELINE);
+	let newScenario = $state(undefined);
 	let scenarios = { [SCENARIO_BASELINE]: { 'controls': {}, 'inputs': {} } };
 	let scenario = $state(SCENARIO_BASELINE);
 	let scenarioTaskComplete = $state(false);
+	let scenarioImportComplete = $state(false)
+	let scenarioExportComplete = $state(false)
+	let scenarioImportFiles = $state([])
 	let selectedScenarios = $state([SCENARIO_BASELINE]);
+	let selectedScenarioTestingVariables = $state(null)
 	let kpiGroups = $state(['']);
 	let activeKpiGroup = $state('');
 
 	let loadingSimulation = $state(false);
 	let isInitializing = $state(true);
+	let scenarioChartContainer = $state(null)
 	let sensitivityChartContainer = $state(null);
 	let sensitivityChartContainer1 = $state(null);
 	let chartContainer = $state(null);
@@ -85,40 +88,38 @@
 	let sensitivityError = $state('');
 
 	$effect(() => {
-		//console.debug('updaing inputs',inputs['treatment_dosage'],scenarios[scenario].inputs['treatment_dosage'])
 		const snapshot = $state.snapshot(inputs);
 		scenarios[scenario]['inputs'] = snapshot;
-		//console.debug('2: updaing inputs',inputs['treatment_dosage'],scenarios[scenario].inputs['treatment_dosage'])
 		if (selectedScenarios.length === 0) selectedScenarios = [SCENARIO_BASELINE];
 	});
 
-	$effect(() => {
-		if (labToggle) {
-			console.log('lab',labToggle)
-			console.log('mode',sensitivityMode)
+	// $effect(() => {
+	// 	if (labToggle) {
+	// 		console.debug('lab',labToggle)
+	// 		console.debug('mode',sensitivityMode)
 			
-			if (sensitivityXVariable !== 'time') {
-				const sensX = constantVariables[sensitivityXVariable];
-				sensitivityXRange.min = sensX.min;
-				sensitivityXRange.max = sensX.max;
-			}
+	// 		if (sensitivityXVariable !== 'time') {
+	// 			const sensX = constantVariables[sensitivityXVariable];
+	// 			sensitivityXRange.min = sensX.min;
+	// 			sensitivityXRange.max = sensX.max;
+	// 		}
 
-			if (sensitivityYVariable && sensitivityMode === 'heatmap') {
-				try {
-					const sensY = constantVariables[sensitivityYVariable];
+	// 		if (sensitivityYVariable && sensitivityMode === 'heatmap') {
+	// 			try {
+	// 				const sensY = constantVariables[sensitivityYVariable];
 
-					sensitivityYRange.min = sensY.min;
-					sensitivityYRange.max = sensY.max;
-				} catch(err) {
-					console.log(err);
-				}
-			}
-		}
-	})
+	// 				sensitivityYRange.min = sensY.min;
+	// 				sensitivityYRange.max = sensY.max;
+	// 			} catch(err) {
+	// 				console.error(err);
+	// 			}
+	// 		}
+	// 	}
+	// })
 
-	$effect(() => {
-		console.debug(`loading ${chart}?`,$state.snapshot(loadingChart))
-	})
+	// $effect(() => {
+	// 	console.debug(`loading ${chart}?`,$state.snapshot(loadingChart))
+	// })
 
 
 	onMount(async () => {
@@ -210,10 +211,8 @@
 		}
 	}
 
-	async function runSimulation(event) {
-		console.debug('running from',event ? event.target : 'no event');
-		console.debug('inputs',inputs['treatment_dosage'])
-		console.debug('inputs for',scenario,'vs',ephScenario,scenarios[scenario].inputs['treatment_dosage'])
+	async function runSimulation(event='no event', target='main') {
+		console.debug('running from',event.target ? event.target : event);
 		if (Object.keys(inputs).length < Object.keys(constantVariables).length) {
 			console.log('Exiting runSimulation: inputs not ready.')
 			return
@@ -228,10 +227,9 @@
 			finalTime = initialTime + 1;
 		}
 
-		const inputsDraft = Object.fromEntries(Object.entries(scenarios).map(([k, v]) => [k, v.inputs]));
+		const inputsDraft = Object.fromEntries(Object.entries(scenarios).map(([k, v]) => [k, v.inputs])); // runs for all scenarios
 
 		try {
-			console.debug(inputsDraft)
 			const response = await fetch('/api/simulate', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -246,8 +244,11 @@
 
 			if (response.ok && data) {
 				simulationResults = data;
-				renderChart(event);
-				loadKpiPlots(event);
+				if (target === 'scenario') renderScenarioChart()
+				else {
+					renderChart(event);
+					loadKpiPlots(event);
+				}
 			} else {
 				console.debug(data.error || "Simulation failed.");
 			}
@@ -279,7 +280,7 @@
 
 	async function createScenario() {
 		const snapshot = $state.snapshot(inputs);
-		scenarios[ephScenario] = {
+		scenarios[newScenario] = {
 			'controls': {
 				'initial_time': inputs.initial_time,
 				'final_time': inputs.final_time,
@@ -287,7 +288,8 @@
 			},
 			'inputs': snapshot
 		};
-		scenario = ephScenario;
+		scenario = newScenario;
+		ephScenario = scenario;
 		scenarioTaskComplete = true
 		console.debug('switched to',$state.snapshot(scenario))
 		if (!selectedScenarios.includes(scenario)) selectedScenarios.push(scenario);
@@ -313,27 +315,35 @@
 			scenario = SCENARIO_BASELINE;
 			inputs = scenarios[scenario]['inputs'];
 			delete scenarios[ephScenario]
+			selectedScenarios.splice(selectedScenarios.indexOf(ephScenario), 1);
 			ephScenario = scenario
 			scenarioTaskComplete = true
 			await runSimulation('deleteScenario: revert to baseline');
 		} else {
 			delete scenarios[ephScenario]
+			selectedScenarios.splice(selectedScenarios.indexOf(ephScenario), 1);
 			scenarioTaskComplete = true
+			ephScenario = scenario
 		}
+		console.debug('scenarios:',Object.keys(scenarios))
+		console.debug('selected scenarios',selectedScenarios)
 		console.debug('switched to',$state.snapshot(scenario))
-		selectedScenarios.splice(selectedScenarios.indexOf(ephScenario), 1);
 	}
 
-	async function importScenario(event) {
-		const file = event.target.files[0];
-
-		if (!file) return;
-
+	async function importScenario() {
 		try {
+			console.debug('file',scenarioImportFiles)
+			const file = scenarioImportFiles[0]
+			
+			if (!file) {
+				errorMessage = "No file uploaded"
+				console.debug(errorMessage)
+				return;
+			}
 			const text = await file.text();
 			const data = JSON.parse(text);
 
-			scenarios[inputScenarioName] = {
+			scenarios[newScenario] = {
 				'controls': {
 					'initial_time': inputs.initial_time,
 					'final_time': inputs.final_time,
@@ -341,9 +351,10 @@
 				},
 				'inputs': data
 			};
-
-			scenario = inputScenarioName;
+			scenario = newScenario;
 			ephScenario = scenario;
+			scenarioImportComplete = true
+			if (!selectedScenarios.includes(scenario)) selectedScenarios.push(scenario)
 			await runSimulation('import');
 		} catch {
 			errorMessage = "Failed to import scenario.";
@@ -357,7 +368,8 @@
 		const link = document.createElement("a");
 
 		link.href = url;
-		link.download = `${scenario}_params.json`;
+		link.download = `scenario_${ephScenario}_${Date.now()}.json`
+		scenarioExportComplete = true
 		link.click();
 		URL.revokeObjectURL(url);
 	}
@@ -368,9 +380,7 @@
 		try {
 			const res = await fetch(`/api/units?q=${pyName}`);
 			const units = await res.text();
-
 			unitsCache.set(pyName, units);
-
 			return units;
 		} catch {
 			return '';
@@ -379,13 +389,9 @@
 
 	function getRealName(pyName) {
 		const constCheck = constantVariables[pyName];
-
 		if (constCheck) return constCheck.real_name;
-
 		const stateCheck = statefulVariables[pyName];
-
 		if (stateCheck) return stateCheck.real_name;
-
 		//const auxCheck = 
 		return pyName.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 	}
@@ -419,7 +425,8 @@
 				line: { dash: lineType, color: track.color, width: 2.5 },
 				legendgroup: SCENARIO_BASELINE,
 				showlegend: false,
-				marker: { color: colors ? colors[i] : null }
+				marker: { color: colors ? colors[i] : null },
+				hoverlabel: {namelength:-1} // to avoid truncation
 			}));
 		} catch(err) {
 			throw Error(`While building a trace for ${key}: ${err}`);
@@ -437,13 +444,15 @@
 		const colorsOverflow = COLOR_SCHEME.length / tracksLength >= Object.keys(scenarios).length;
 		const colorsUnderflow = COLOR_SCHEME.length < tracksLength;
 		let traces = [];
-		console.debug(selectedScenarios)
+		console.debug('selectedScenarios',selectedScenarios)
+		console.debug('targettracks',targetTracks)
 
 		try {
 			for (const [i, k] of Object.keys(scenarios).filter((k) => selectedScenarios.includes(k)).entries()) {
 				if (!simulationResults[k]) continue;
-				console.debug(k)
-				if (colorsUnderflow) traces.push(...buildTrace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, LINE_TYPES[i % tracksLength])); else if (colorsOverflow) traces.push(...buildTrace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, COLOR_SCHEME.slice(i * tracksLength, tracksLength), LINE_TYPES[i % tracksLength])); else traces.push(...buildTrace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, COLOR_SCHEME, LINE_TYPES[i % tracksLength]));
+				if (colorsUnderflow) traces.push(...buildTrace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, LINE_TYPES[i % tracksLength])); 
+				else if (colorsOverflow) traces.push(...buildTrace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, COLOR_SCHEME.slice(i * tracksLength, tracksLength), LINE_TYPES[0])); 
+				else traces.push(...buildTrace(k, simulationResults[k].time, simulationResults[k].variables, targetTracks, COLOR_SCHEME, LINE_TYPES[i % tracksLength]));
 			}
 		} catch (err) {
 			// intentional early exit
@@ -458,14 +467,14 @@
 			return;
 		}
 
+		// TODO: check unified units
 		let yunits = await getUnits(chartValues[0]);
-
 		const layout = {
 			title: { text: chart, font: { size: 18 } },
 			xaxis: { title: { text: 'Time (Days)' }, gridcolor: '#f0f0f0' },
 			yaxis: { title: { text: yunits }, gridcolor: '#f0f0f0' },
 			margin: { t: 50, b: 50, l: 60, r: 20 },
-			hovermode: 'x unified',
+			//hovermode: 'x unified',
 			plot_bgcolor: '#ffffff',
 			paper_bgcolor: '#ffffff',
 			legend: {
@@ -488,11 +497,121 @@
 	}
 
 	// ============ SENSITIVITY TESTING FUNCTIONS ============
+	async function runScenarioTest(event) {
+		runSimulation(event, 'scenario')
+	}
+	// async function runScenarioTest(event) {
+	// 	console.debug('running from',event ? event.target : 'no event');
+	// 	if (Object.keys(inputs).length < Object.keys(constantVariables).length) {
+	// 		console.log('Exiting runSimulation: inputs not ready.')
+	// 		return
+	// 	}
+	// 	loadingSimulation = true;
+	// 	errorMessage = "";
+
+	// 	let finalTime = inputs.final_time;
+	// 	const initialTime = inputs.initial_time;
+
+	// 	if (finalTime <= initialTime) {
+	// 		finalTime = initialTime + 1;
+	// 	}
+
+	// 	const inputsDraft = Object.fromEntries(Object.entries(scenarios).map(([k, v]) => [k, v.inputs]));
+
+	// 	try {
+	// 		const response = await fetch('/api/simulate', {
+	// 			method: 'POST',
+	// 			headers: { 'Content-Type': 'application/json' },
+	// 			body: JSON.stringify({
+	// 				initialTime,
+	// 				finalTime,
+	// 				timeStep: inputs.time_step,
+	// 				inputs: inputsDraft
+	// 			})
+	// 		});
+	// 		const data = await response.json();
+
+	// 		if (response.ok && data) {
+	// 			simulationResults = data;
+	// 			renderChart(event);
+	// 			loadKpiPlots(event);
+	// 		} else {
+	// 			console.debug(data.error || "Simulation failed.");
+	// 		}
+	// 	} catch(err) {
+	// 		errorMessage = "Could not communicate with backend.";
+	// 		console.error(err);
+	// 	} finally {
+	// 		loadingSimulation = false;
+	// 	}
+	// }
+
+	async function renderScenarioChart() {
+		//selectedScenarioTestingVariables
+		if (!Plotly || Object.keys(simulationResults[SCENARIO_BASELINE] || {}).length === 0 || !scenarioChartContainer) return;
+		const results = $state.snapshot(simulationResults)
+		const vars = $state.snapshot(selectedScenarioTestingVariables)
+		const targetTracks = vars.map(v => ({key: v, name: v}));
+		const tracksLength = targetTracks.length;
+		const colorsOverflow = COLOR_SCHEME.length / tracksLength >= Object.keys(scenarios).length;
+		const colorsUnderflow = COLOR_SCHEME.length < tracksLength;
+		let traces = [];
+		console.debug('selectedScenarios',selectedScenarios)
+		console.debug('selectedScenarioTestingVariables',selectedScenarioTestingVariables)
+		console.debug('scen targettracks',targetTracks)
+
+		try {
+			for (const [i, k] of Object.keys(scenarios).filter((k) => selectedScenarios.includes(k)).entries()) {
+				if (!results[k]) continue;
+				if (colorsUnderflow) traces.push(...buildTrace(k, results[k].time, results[k].variables, targetTracks, LINE_TYPES[i % tracksLength])); 
+				else if (colorsOverflow) traces.push(...buildTrace(k, results[k].time, results[k].variables, targetTracks, COLOR_SCHEME.slice(i * tracksLength, tracksLength), LINE_TYPES[0])); 
+				else traces.push(...buildTrace(k, results[k].time, results[k].variables, targetTracks, COLOR_SCHEME, LINE_TYPES[i % tracksLength]));
+			}
+		} catch (err) {
+			// intentional early exit
+			console.debug(err)
+			console.log('Exiting renderScenarioChart.')
+			return;
+		}
+
+		if (traces.length === 0) {
+			errorMessage = "Warning: None of the target plotting variables were found in the model output keys. Check spelling.";
+			console.debug(errorMessage)
+			return;
+		}
+
+		// TODO: check unified units
+		let yunits = await getUnits(selectedScenarioTestingVariables[0]);
+		const layout = {
+			title: { text: chart, font: { size: 18 } },
+			xaxis: { title: { text: 'Time (Days)' }, gridcolor: '#f0f0f0' },
+			yaxis: { title: { text: yunits }, gridcolor: '#f0f0f0' },
+			margin: { t: 50, b: 50, l: 60, r: 20 },
+			//hovermode: 'x unified',
+			plot_bgcolor: '#ffffff',
+			paper_bgcolor: '#ffffff',
+			legend: {
+				orientation: 'h',
+				yanchor: 'top',
+				y: -0.2,
+				'xanchor': 'left',
+				x: 0
+			}
+		};
+
+		const config = {
+			responsive: true,
+			displaylogo: false,
+			modeBarButtonsToRemove: ['select2d', 'lasso2d']
+		};
+
+		Plotly.newPlot(scenarioChartContainer, traces, layout, config, { responsive: true });
+		loadingChart = false
+	}
+
 	// Update sensitivity mode and reset variable selections
 	function updateSensitivityMode(newMode) {
-		console.debug('going',newMode,sensitivityMode,sensitivityXVariable,sensitivityYVariable)
 		if (newMode === undefined || sensitivityMode === newMode) return
-		console.debug('still going')
 		sensitivityResults = undefined
 		sensitivityMode = newMode
 		sensitivityError = '';
@@ -647,7 +766,6 @@
 			}
 			if (response.ok) {
 				sensitivityResults = data;
-				console.debug(sensitivityResults.final_values)
 				sensitivityStatus = 'done';
 				renderSensitivityChart();
 			}
@@ -802,7 +920,7 @@
 	<div class="nav-wrapper">
 		<div class="brand"><span>LOGO</span><span>{title}</span></div>
 		<div class="nav-options-wrapper">
-			<Button onclick={() => labToggle = !labToggle}>Lab</Button>
+			<Button onclick={() => {labToggle=!labToggle;if(!labToggle)runSimulation()}}>Lab</Button>
 		</div>
 	</div>
 </nav>
@@ -811,9 +929,14 @@
 	{#if labToggle}
 		<div id="lab-page" class="main-page">
 			<div class="main-display">
-				<div class="main-display-wrapper" class:hidden={!sensitivityResults}>
-					<div class="sensitivity-chart" bind:this={sensitivityChartContainer}></div>
-					<div class="sensitivity-chart" bind:this={sensitivityChartContainer1}></div>
+				<!-- <div class="main-display-wrapper" class:hidden={!sensitivityResults}> -->
+				<div class="main-display-wrapper">
+					{#if labType==='sensitivity' && sensitivityResults}
+						<div class="sensitivity-chart" bind:this={sensitivityChartContainer}></div>
+						<div class="sensitivity-chart" bind:this={sensitivityChartContainer1}></div>
+					{:else if labType==='scenario' && simulationResults}
+						<div class="scenario-chart" bind:this={scenarioChartContainer}></div>
+					{/if}
 				</div>
 			</div>
 
@@ -826,28 +949,69 @@
 						</Tabs.List>
 						<Tabs.Content class="grid w-full gap-[.8rem]" value="scenario">
 							<div class="grid items-center gap-[.2rem]">
-								<Label for="scenario-testing-select">Compare scenarios</Label>
-								<MultiSelect
-									id="scenario-testing-select"
-									onchange={renderChart}
-									bind:value={selectedScenarios}
-									options={Object.keys(scenarios)}
-								/>
+								<Label for="select-scenario">Export scenario</Label>
+								<div class="flex width-full">
+									<Select.Root type="single"
+										id="select-scenario"
+										bind:value={ephScenario}
+										onValueChange={()=>{if(scenario!==ephScenario)scenarioExportComplete=false}}>
+										<Select.Trigger class="!flex-grow">{ephScenario ?? "Select a scenario"}</Select.Trigger>
+										<Select.Content class="z-[99] max-h-[16rem]">
+											{#each Object.keys(scenarios) as scenarioOption}
+												<Select.Item value={scenarioOption} label={scenarioOption}>{scenarioOption}</Select.Item>
+											{/each}
+										</Select.Content>
+									</Select.Root>
+									<Button class="border-none" size="icon" onclick={exportScenario}>
+										{#if scenarioExportComplete}
+											<HugeiconsIcon icon={CheckIcon}/>
+										{:else}
+											<HugeiconsIcon icon={FileExportIcon}/>
+										{/if}
+									</Button>
+								</div>
+							</div>
+
+							<div class="grid items-center gap-[.4rem]">
+								<div class="grid items-center gap-[.2rem]">
+									<Label for="import-file">Import Scenario</Label>
+									<div class="flex h-full">
+										<FileUploaderButton labelText="Add file" id="import-file" bind:files={scenarioImportFiles} onchange={()=>{if(!scenarioImportFiles)console.debug('is this an issue')}} type="file" accept=".json" />
+										<Input id="import-scenario" class="!w-full h-full" type="text" placeholder="New scenario" bind:value={newScenario}/>
+										<Button class="border-none h-full" size="icon" onclick={importScenario}>
+											{#if scenarioImportComplete}
+												<HugeiconsIcon icon={CheckIcon}/>
+											{:else}
+												<HugeiconsIcon icon={FileImportIcon}/>
+											{/if}
+										</Button>
+									</div>
+								</div>
 							</div>
 
 							<div class="grid items-center gap-[.2rem]">
-								<Label for="import-file">File</Label>
-								<Input id="import-file" type="file" accept=".json" />
+								<Label for="scenario-testing-select">Compare scenarios</Label>
+								<div class="multiselect">
+									<MultiSelect
+										id="scenario-testing-select"
+										onchange={renderChart}
+										bind:value={selectedScenarios}
+										options={Object.keys(scenarios)}
+									/>
+								</div>
 							</div>
+
 							<div class="grid items-center gap-[.2rem]">
-								<Label>Scenario name</Label>
-								<Input
-									class="max-w-xs"
-									type="text"
-									bind:value={inputScenarioName}
-								/>
+								<Label for="scenario-testing-variable-select">Watch variables</Label>
+								<div class="multiselect">
+									<MultiSelect
+										id="scenario-testing-variable-select"
+										onchange={runScenarioTest}
+										bind:value={selectedScenarioTestingVariables}
+										options={Object.values(statefulVariables).map(v => v.real_name)}
+									/>
+								</div>
 							</div>
-							<Button onclick={importScenario}>Import</Button>
 						</Tabs.Content>
 
 						<Tabs.Content value="sensitivity" class="grid w-full gap-[.8rem]">
@@ -1015,12 +1179,6 @@
 		{/each}
 
 		<div class="field">
-			<!-- <div class="scenario-buttons">
-				<Button onclick={createScenario}>Create</Button>
-				<Button onclick={loadScenario}>Load</Button>
-				<Button onclick={exportScenario}>Export</Button>
-				<Button onclick={deleteScenario}>Delete</Button>
-			</div> -->
 			<Tabs.Root value="create" class="w-full" onValueChange={()=>scenarioTaskComplete=false}>
 				<Tabs.List>
 					<Tabs.Trigger value="create">Create</Tabs.Trigger>
@@ -1030,7 +1188,7 @@
 				<Tabs.Content class="grid items-center gap-[.2rem]" value="create">
 					<Label for="input-scenario">Scenario name</Label>
 					<div class="flex">
-						<Input id="input-scenario" class="!w-full" type="text" placeholder="New scenario" bind:value={ephScenario}/>
+						<Input id="input-scenario" class="!w-full" type="text" placeholder="New scenario" bind:value={newScenario} oninput={()=>{scenarioTaskComplete=false}}/>
 						<Button class="border-none" size="icon" onclick={createScenario}>
 							{#if scenarioTaskComplete}
 								<HugeiconsIcon icon={CheckIcon}/>
@@ -1094,13 +1252,17 @@
 	</section>
 
 	<section class="displays">
-		<section
-			class="chart chart-wrapper relative"
-			class:hidden={!simulationResults}
-		>
-			<div class="loading-skeleton" disabled={loadingChart}></div>
-			<div bind:this={chartContainer} class="plotly-target"></div></section>
-		<section bind:this={kpiContainer} class="kpi-wrapper"></section>
+		<section class="displays-wrapper">
+			<section
+				class="chart chart-wrapper relative"
+				class:hidden={!simulationResults}
+			>
+				<div class="loading-skeleton" disabled={loadingChart}></div>
+				<div bind:this={chartContainer} class="plotly-target"></div>
+			</section>
+			<section bind:this={kpiContainer} class="kpi-wrapper"></section>
+		</section>
+		<div class="w-full !py-4">Active scenarios: {selectedScenarios.join(", ")}</div>
 	</section>
 
 	<Tooltip.Provider>
@@ -1158,203 +1320,188 @@
 <footer>{footnote}</footer>
 
 <style>
-@reference "tailwindcss";
+footer {
+	padding: .5rem .8rem;
+}
 
-	footer {
-		padding: .5rem .8rem;
-	}
+.field {
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: start;
+}
 
-	.field {
-		display: flex;
-		flex-direction: row;
-		justify-content: space-between;
-		align-items: start;
-		.input-scenario {
-			height: min-content;
-			width: 20ch;
-			font-size: 14px;
-		}
-		input {
-			height: min-content;
-			width: 8ch;
-			font-size: 14px;
-		}
-	}
+nav {
+	position: fixed;
+	width: 100vw;
+	height: 2.75rem;
+	z-index: 99;
+	background: #fff;
+}
 
-	label {
-		font-size: 0.9rem;
-		color: #111;
-	}
+.nav-wrapper {
+	display: flex;
+	justify-content: space-between;
+	padding: .8rem;
+}
 
-	nav {
-		position: fixed;
-		width: 100vw;
-		height: 2.75rem;
-		z-index: 99;
-		background: #fff;
-	}
+nav .brand {
+	display: flex;
+	gap: 24px;
+}
 
-	.nav-wrapper {
-		display: flex;
-		justify-content: space-between;
-		padding: .8rem;
-	}
+nav .nav-options-wrapper {
+	display: flex;
+	justify-content: space-around;
+	gap: 12px;
+}
 
-	nav .brand {
-		display: flex;
-		gap: 24px;
-	}
+#lab-page {
+	display: grid;
+	grid-template-rows: 1fr 1fr;
+	grid-template-columns: 30% 70%;
+	grid-template-areas: 'sidebar display' 'sidebar display';
+}
+.multiselect :global(ul.selected li) {
+	padding: .2rem .35rem;
+	margin: 4px !important;
+}
 
-	nav .nav-options-wrapper {
-		display: flex;
-		justify-content: space-around;
-		gap: 12px;
-	}
+.main-sidebar {
+	grid-area: sidebar;
+}
+.main-sidebar-wrapper {
+	height: 100%;
+	padding: .8rem;
+}
+.main-display {
+	display: flex;
+	flex-direction: column;
+	grid-area: display;
+	height: 100%;
+	width: 100%;
+}
 
-	#lab-page {
-		display: grid;
-		grid-template-rows: 1fr 1fr;
-		grid-template-columns: 30% 70%;
-		grid-template-areas: 'sidebar display' 'sidebar display';
-	}
+.sensitivity-chart {
+	flex: 1;
+	width: max-content;
+	max-width: 100%;
+}
 
-	.main-sidebar {
-		grid-area: sidebar;
-	}
-	.main-sidebar-wrapper {
-		height: 100%;
-		padding: .8rem;
-	}
-	.main-display {
-		display: flex;
-		flex-direction: column;
-		grid-area: display;
-		height: 100%;
-		width: 100%;
-	}
+.loading-skeleton:disabled {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+	background-size: 200% 100%;
+	animation: shimmer 1.5s infinite;
+	z-index: 10;
+}
+@keyframes shimmer {
+	0% { background-position: 200% 0; }
+	100% { background-position: -200% 0; }
+}
 
-	.sensitivity-chart {
-		flex: 1;
-		width: max-content;
-		max-width: 100%;
-	}
+.hidden {
+	display: none;
+}
 
-	.loading-skeleton:disabled {
-		position: absolute;
-		top: 0;
-		left: 0;
-		width: 100%;
-		height: 100%;
-		background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-		background-size: 200% 100%;
-		animation: shimmer 1.5s infinite;
-		z-index: 10;
-	}
-	@keyframes shimmer {
-		0% { background-position: 200% 0; }
-		100% { background-position: -200% 0; }
-	}
-
-	.hidden {
-		display: none;
-	}
-
-	.main {
-		flex: 1;
+.main {
+	flex: 1;
+	background: white;
+	font-size: 16px;
+	color: #000;
+	padding-top: 2.75rem;
+	display: grid;
+	grid-template-columns: 20% 80%;
+	grid-template-areas: "globals displays" "inputs inputs";
+	gap: 0;
+	padding: 3em 0;
+	> * {
 		background: white;
-		font-size: 16px;
-		color: #000;
-		padding-top: 2.75rem;
-		display: grid;
-		grid-template-columns: 20% 80%;
-		grid-template-areas: "globals displays" "inputs inputs";
-		gap: 0;
-		padding: 3em 0;
-		> * {
-			background: white;
-		}
 	}
+}
 
-	.main-page {
-		width: 100%;
-		height: 100%;
-		position: fixed;
-		top: 0;
-		left: 0;
-		z-index: 98;
-		padding-top: 2.75rem;
-	}
+.main-page {
+	width: 100%;
+	height: 100%;
+	position: fixed;
+	top: 0;
+	left: 0;
+	z-index: 98;
+	padding-top: 2.75rem;
+}
 
-	.globals {
-		grid-area: globals;
-		display: flex;
-		flex-direction: column;
-		padding: 12px;
-		gap: 12px;
-		.global-number-input {
-			width: 10ch;
-			max-width: fit-content;
-		}
-	}
+.globals {
+	grid-area: globals;
+	display: flex;
+	flex-direction: column;
+	padding: 12px;
+	gap: 12px;
+}
 
-	.field {
-		display: flex;
-		flex-direction: row;
-		width: 100%;
-		flex-wrap: wrap;
-	}
+.field {
+	display: flex;
+	flex-direction: row;
+	width: 100%;
+	flex-wrap: wrap;
+}
 
-	.displays {
-		grid-area: displays;
-		display: grid;
-		grid-template-columns: 70% 30%;
-	}
+.displays {
+	grid-area: displays;	
+}
+.displays-wrapper {
+	display: grid;
+	grid-template-columns: 70% 30%;
+}
 
-	.chart-wrapper {
-		padding: 12px;
-		max-width: 100%;
-	}
+.chart-wrapper {
+	padding: 12px;
+	max-width: 100%;
+}
 
-	.plotly-target {
-		max-width: 100%;
-		min-height: 450px;
-	}
+.plotly-target {
+	max-width: 100%;
+	min-height: 450px;
+}
 
-	.kpi-wrapper {
-		display: flex;
-		flex-direction: column;
-		height: 100%;
-		align-items: center;
-		justify-content: center;
-	}
+.kpi-wrapper {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	align-items: center;
+	justify-content: center;
+}
 
-	.inputs {
-		grid-area: inputs;
-		padding: 12px;
-	}
+.inputs {
+	grid-area: inputs;
+	padding: 12px;
+}
 
-	button.domain-header {
+button.domain-header {
+	background: none;
+	border: none;
+	padding: 0;
+	font: inherit;
+	cursor: pointer;
+	text-align: inherit;
+	&:hover {
 		background: none;
-		border: none;
-		padding: 0;
-		font: inherit;
-		cursor: pointer;
-		text-align: inherit;
-		&:hover {
-			background: none;
-			text-decoration: underline;
-		}
+		text-decoration: underline;
 	}
+}
 
-	.columns {
-		display: flex;
-		gap: 1.6rem;
-	}
+.columns {
+	display: flex;
+	gap: 1.6rem;
+}
 
-	.column {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		gap: .5rem;
-	}
+.column {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: .5rem;
+}
 </style>

@@ -1,0 +1,20 @@
+{
+    "Antimicrobial Use": [
+        "Cumulative antimicrobial usage",
+        "Metaphylactic usage",
+        "Therapeutic usage"
+    ],
+    "Economic Outcomes": [
+        "Profit",
+        "Herd Revenue",
+        "Total Production Loss",
+        "Healthcare cost"
+    ],
+    "SEIQR": [
+        "Susceptible",
+        "Exposed",
+        "Infected",
+        "Recovered",
+        "Quarantine"
+    ]
+}

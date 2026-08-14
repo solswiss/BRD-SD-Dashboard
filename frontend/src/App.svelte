@@ -87,6 +87,7 @@
 	let sensitivityZVariable = $state(null);
 	let sensitivityXRange = $state({ min: null, max: null });
 	let sensitivityYRange = $state({ min: null, max: null });
+	let sensitivityTime = $state(0)
 	let sensitivityStep = $state(2);
 	let sensitivityResults = $state(null);
 	let sensitivityStatus = $state('idle'); // idle, running, done
@@ -147,6 +148,7 @@
 			const data = await fetchWithCache('/api/metadata');
 			statefulVariables = { ...data.statefuls };
 			constantVariables = { ...data.constants };
+			sensitivityTime = constantVariables['initial_time']
 		} catch(err) {
 			errorMessage = "Could not load metadata.";
 			isInitializing = false;
@@ -155,11 +157,9 @@
 
 	async function fetchWithCache(url) {
 		if (fetchCache.has(url)) return fetchCache.get(url);
-
 		try {
 			const response = await fetch(url);
 			const data = await response.json();
-
 			if (response.ok) {
 				fetchCache.set(url, data);
 
@@ -176,7 +176,6 @@
 	async function fetchBaseline() {
 		try {
 			const data = await fetchWithCache('/api/baseline_parameters');
-
 			scenarios[SCENARIO_BASELINE] = { 'controls': data.controls, 'inputs': data.inputs };
 		} catch(err) {
 			errorMessage = "Could not load baseline parameters.";
@@ -648,9 +647,8 @@
 		if (sensitivityMode === 'heatmap') {
 			yVarName = sensitivityYVariable;
 			yRange = validateAndNormalizeRange(sensitivityYRange.min, sensitivityYRange.max, yVarName);
-
 			if (!yRange) return null;
-
+			console.debug('time=',sensitivityTime)
 			return {
 				mode: 'heatmap',
 				variables: {
@@ -660,7 +658,7 @@
 						max: sensitivityXRange.max,
 						steps
 					},
-					[sensitivityZVariable]: null
+					'eval': [sensitivityZVariable,sensitivityTime]
 				}
 			};
 		} else {
@@ -1068,7 +1066,22 @@
 								<!-- <Label>{sensitivityXVariable} range</Label> -->
 								<RangeSlider hideTextInput labelText={`${getRealName(sensitivityXVariable)} range`} bind:value={sensitivityXRange.min} bind:valueUpper={sensitivityXRange.max} min={constantVariables[sensitivityXVariable]["min"] ?? 0} max={constantVariables[sensitivityXVariable]["max"] ?? 1} step={constantVariables[sensitivityXVariable]["step"] ?? .1}/>
 							</div>
-							{/if}	
+							{/if}
+
+							{#if sensitivityMode==='heatmap'}
+							<div class="grid items-center gap-[.2rem]">
+								<Label for="sensitivity-time">Evaluation Time</Label>
+								<Input id="sensitivity-time" class="input-number"
+									type="number"
+									inputmode="numeric"
+									placeholder={inputs['final_time']}
+									min={constantVariables['initial_time']}
+									step={constantVariables['time_step']}
+									name="sensitivity-time"
+									bind:value={sensitivityTime}
+								/>
+							</div>
+							{/if}
 							<div class="grid items-center gap-[.2rem]">
 								<Label for="sensitivity-step">Partition Count</Label>
 								<Input id="sensitivity-step" class="input-number"
@@ -1248,7 +1261,7 @@
 				// class:hidden={!simulationResults}
 				class:skeleton={loadingChart || !simulationResults}
 			>
-				<div hidden={loadingChart || !simulationResults} bind:this={chartContainer} class="plotly-target"></div>
+				<div hidden={loadingChart || !simulationResults} bind:this={chartContainer} class="plotly-target !w-full"></div>
 			</section>
 			<section bind:this={kpiContainer} class="kpi-wrapper"></section>
 		</section>
@@ -1289,7 +1302,7 @@
 				</div>
 
 				<div
-					style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));"
+					style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));grid-gap:1rem;"
 				>
 					{#each Object.values(domains[view]) as element}
 						<InputField

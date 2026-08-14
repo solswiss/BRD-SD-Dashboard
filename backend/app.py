@@ -17,7 +17,8 @@ all_variables_df = doc.dropna(subset=['Py Name'])
 all_variables = {}
 kpis = {}
 
-# Constants
+FILEPATH_PREFIX = "../setup config/"
+# Dashboard constants
 KPI_TITLE_SIZE = 12
 KPI_VALUE_SIZE = 28
 KPI_MARGIN = 50
@@ -52,7 +53,7 @@ def init():
             "desc": comment
         }
 
-    with open('kpis.json', 'r') as file:
+    with open(FILEPATH_PREFIX+'kpis.json', 'r') as file:
         data = json.load(file)
         for k, v in data.items():
             kpis[k] = v
@@ -112,13 +113,11 @@ def get_baseline_parameters():
 def get_globals():
     """Return global input variables and KPI groups."""
     try:
-        with open('globals.json', 'r') as file:
+        with open(FILEPATH_PREFIX+'globals.json', 'r') as file:
             data = json.load(file)
-        
         globals_vars = {var: all_variables[var] for var in data["variables"]}
-        
         return jsonify({
-            'globals': globals_vars,
+            'globals': json.dumps(globals_vars),
             'kpi_groups': list(kpis.keys())
         })
     except Exception as e:
@@ -129,7 +128,7 @@ def get_globals():
 def get_domains():
     """Return variables grouped by domain (constants only)."""
     try:
-        with open('domains.json', 'r') as file:
+        with open(FILEPATH_PREFIX+'domains.json', 'r') as file:
             data = json.load(file)
         
         constants = {k: v for k, v in all_variables.items() if v["type"] == 'Constant'}
@@ -206,7 +205,6 @@ def run_model(initial_time, final_time, time_step, inputs):
     """Execute PySD model with given parameters. Returns time series results."""
     overrides = {}
     stateful_overrides = {}
-
     for py_name, value in inputs.items():
         var_type = all_variables[py_name].get('type')
         if var_type == 'Constant':
@@ -228,8 +226,10 @@ def run_model(initial_time, final_time, time_step, inputs):
         return res
         
     except Exception as e:
-        print(f"Error in run_model: {str(e)}")
-        print("name is",type(e).__name__)
+        print(f"Error in run_model: type: {type(e).__name__}, msg: {str(e)}")
+        print("t&m",overrides['usage_frequency_t'],overrides['usage_frequency_m'])
+        print("overrides",overrides)
+        model.reload()
 
 
 @app.route('/api/simulate', methods=['POST'])
@@ -249,15 +249,15 @@ def simulate():
         results = {}
         for scenario_name, scenario_inputs in inputs_by_scenario.items():
             res = run_model(initial_time, final_time, time_step, scenario_inputs)
+            if (res is None): # run_model failed
+                return jsonify({"error": "Failed to run model"}), 400
             results[scenario_name] = {
                 "time": res.index.tolist(),
                 "variables": {col: res[col].tolist() for col in res.columns}
             }
-        print("ok")
         return jsonify(results)
     
     except Exception as e:
-        print("erring out",str(e))
         return jsonify({"error": str(e)}), 400
 
 
@@ -266,11 +266,12 @@ def build_parameter_values(min_val, max_val, steps):
     return np.linspace(min_val, max_val, steps).tolist()
 
 
-def extract_final_value(result_df, variable_name):
+
+def extract_value_at(result_df, variable_name, target_time):
     """Extract the final time point value for a variable from results."""
     if variable_name not in result_df.columns:
         return None
-    return float(result_df[variable_name].iloc[-1])
+    return float(result_df.at[target_time, variable_name])
 
 
 def extract_max_value(result_df, variable_name):
@@ -312,7 +313,7 @@ def run_sensitivity_parametric(base_inputs, x_param, x_min, x_max, steps,
             })
         except Exception as e:
             print(f"Error in parametric run with {x_param}={x_val}: {e}")
-            continue
+            raise Exception("Error in parametric run")
  
     return {
         "time_series": time_series_results,
@@ -321,7 +322,7 @@ def run_sensitivity_parametric(base_inputs, x_param, x_min, x_max, steps,
  
  
 def run_sensitivity_heatmap(base_inputs, x_param, x_min, x_max, y_param, y_min, y_max, 
-                            steps, output_variable, initial_time, final_time, time_step):
+                            steps, output_variable, eval_time, initial_time, final_time, time_step):
     """
     Run heatmap sensitivity: sweep two constant parameters in a grid, measure stateful output at final time.
     Returns 2D grid of output values where x and y are constant parameters, z is the stateful variable.
@@ -330,10 +331,9 @@ def run_sensitivity_heatmap(base_inputs, x_param, x_min, x_max, y_param, y_min, 
     y_values = build_parameter_values(y_min, y_max, steps)
     z_values = []
     output_real_name = all_variables[output_variable]['real_name']
- 
+
     for y_val in y_values:
         row = []
-        row_rounded = []
         for x_val in x_values:
             inputs = base_inputs.copy()
             inputs[x_param] = x_val
@@ -341,13 +341,14 @@ def run_sensitivity_heatmap(base_inputs, x_param, x_min, x_max, y_param, y_min, 
 
             try:
                 res_df = run_model(initial_time, final_time, time_step, inputs)
-                z_val = extract_final_value(res_df, output_real_name)
+                z_val = extract_value_at(res_df, output_real_name, eval_time)
                 row.append(z_val if z_val is not None else 0)
 
                 res_df = run_model(initial_time, final_time, time_step, inputs)
             except Exception as e:
                 print(f"Error in heatmap run with {x_param}={x_val}, {y_param}={y_val}: {e}")
-                row.append(0)
+                raise Exception("Error in heatmap run")
+                #row.append(0)
         
         z_values.append(row)
 
@@ -417,11 +418,14 @@ def sensitivity_analysis():
             var_keys = list(variables.keys())
             x_param = var_keys[0]
             y_param = var_keys[1] if len(var_keys) > 1 else None
-            z_variable = var_keys[2] if len(var_keys) > 2 else None
+            eval_settings = variables['eval'] if len(var_keys) > 2 else None
             
-            if not x_param or not y_param or not z_variable:
+            if not x_param or not y_param or not eval_settings or len(eval_settings) < 2:
                 return jsonify({"error": "Heatmap mode requires two constant parameters and one stateful output variable"}), 400
-            
+            z_variable =  eval_settings[0]
+            eval_time = float(eval_settings[1]) if eval_settings[1] else initial_time
+            if eval_time > final_time or eval_time < initial_time: eval_time = initial_time
+
             x_config = variables[x_param]
             y_config = variables[y_param]
             
@@ -434,17 +438,15 @@ def sensitivity_analysis():
             result = run_sensitivity_heatmap(
                 base_inputs, x_param, x_min, x_max,
                 y_param, y_min, y_max, steps,
-                z_variable, initial_time, final_time, time_step
+                z_variable, eval_time, initial_time, final_time, time_step
             )
             
             return jsonify(result)
-
         else:
             return jsonify({"error": f"Unknown sensitivity mode: {mode}"}), 400
-
     except Exception as e:
         print(f"Error in sensitivity_analysis: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Failed to perform sensitivity analysis"}), 400
     
 
 if __name__ == '__main__':

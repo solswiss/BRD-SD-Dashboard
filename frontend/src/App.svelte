@@ -1,9 +1,9 @@
 <script>
 	import './app.css';
 	import { onMount } from 'svelte';
-	import { title, footnote } from '../settings.json';
-	import colors from '../colors.json';
-	import charts from '../charts.json';
+	import { title, footnote } from '../../setup config/settings.json';
+	import colors from '../../setup config/colors.json';
+	import charts from '../../setup config/charts.json';
 	import chroma from 'chroma-js'
 	import "carbon-components-svelte/css/white.css";
 	import InputField from '../components/Input.svelte';
@@ -132,6 +132,7 @@
 		await fetchGlobals();
 		await setInputs();
 		await runSimulation();
+		await loadKpiPlots();
 
 		if (!errorMessage) connected = true
 		else return
@@ -507,6 +508,12 @@
 		labToggle = false
 	}
 
+	function goToLab(target=labType) {
+		console.debug("going to lab")
+		labType = target
+		labToggle = true
+	}
+
 	// ============ SENSITIVITY TESTING FUNCTIONS ============
 	async function runScenarioTest(event) {
 		runSimulation(event, 'scenario')
@@ -581,12 +588,12 @@
 		sensitivityYVariable = null;
 		sensitivityZVariable = null;
 
-		if (Plotly) {
-			console.debug('purging')
-			Plotly.purge(scenarioChartContainer)
-			Plotly.purge(sensitivityChartContainer);
-			Plotly.purge(sensitivityChartContainer1);
-		}
+		// if (Plotly) {
+		// 	console.debug('purging')
+		// 	Plotly.purge(scenarioChartContainer)
+		// 	Plotly.purge(sensitivityChartContainer);
+		// 	Plotly.purge(sensitivityChartContainer1);
+		// }
 	}
 
 	// Validate range and apply 5% minimum step floor
@@ -925,7 +932,7 @@
 										bind:value={ephScenario}
 										onValueChange={()=>{if(scenario!==ephScenario)scenarioExportComplete=false}}>
 										<Select.Trigger class="!flex-grow">{ephScenario ?? "Select a scenario"}</Select.Trigger>
-										<Select.Content class="z-[99] max-h-[16rem]">
+										<Select.Content class="z-[99]">
 											{#each Object.keys(scenarios) as scenarioOption}
 												<Select.Item value={scenarioOption} label={scenarioOption}>{scenarioOption}</Select.Item>
 											{/each}
@@ -1000,7 +1007,7 @@
 										id="sensitivity-z-var"
 										bind:value={sensitivityZVariable}>
 										<Select.Trigger class="!w-full">{sensitivityZVariable ?? "Select a Z variable"}</Select.Trigger>
-										<Select.Content class="z-[99] max-h-[10rem]">
+										<Select.Content class="z-[99]">
 											{#each Object.entries(statefulVariables) as [pyName, varData]}
 												<Select.Item value={pyName} label={varData.real_name}>{varData.real_name}</Select.Item>
 											{/each}
@@ -1013,7 +1020,7 @@
 										id="sensitivity-y-var"
 										bind:value={sensitivityYVariable}>
 										<Select.Trigger class="!w-full">{sensitivityYVariable ?? "Select a Y variable"}</Select.Trigger>
-										<Select.Content class="z-[99] max-h-[10rem]">
+										<Select.Content class="z-[99]">
 											{#each Object.entries(constantVariables) as [pyName, varData]}
 												<Select.Item value={pyName} label={varData.real_name}>{varData.real_name}</Select.Item>
 											{/each}
@@ -1033,7 +1040,7 @@
 									id="sensitivity-y-var"
 									bind:value={sensitivityYVariable}>
 									<Select.Trigger class="!w-full">{sensitivityYVariable ?? "Select a Y variable"}</Select.Trigger>
-									<Select.Content class="z-[99] max-h-[10rem]">
+									<Select.Content class="z-[99]">
 										{#each Object.entries(statefulVariables) as [pyName, varData]}
 											<Select.Item value={pyName} label={varData.real_name}>{varData.real_name}</Select.Item>
 										{/each}
@@ -1048,7 +1055,7 @@
 									id="sensitivity-x-var"
 									bind:value={sensitivityXVariable}>
 									<Select.Trigger class="!w-full">{sensitivityXVariable ?? "Select a X variable"}</Select.Trigger>
-									<Select.Content class="z-[99] max-h-[10rem]">
+									<Select.Content class="z-[99]">
 										{#each Object.entries(constantVariables) as [pyName, varData]}
 											<Select.Item value={pyName} label={varData.real_name}>{varData.real_name}</Select.Item>
 										{/each}
@@ -1102,7 +1109,7 @@
 				bind:value={chart}
 				onValueChange={renderChart}>
 				<Select.Trigger>{chart ?? "Select a chart"}</Select.Trigger>
-				<Select.Content class="z-[99] max-h-[10rem]">
+				<Select.Content class="z-[99]">
 					{#each Object.keys(charts) as chartOption}
 						<Select.Item value={chartOption} label={chartOption}>{chartOption}</Select.Item>
 					{/each}
@@ -1116,7 +1123,7 @@
 				id="global-view"
 				bind:value={view}>
 				<Select.Trigger>{view ?? "Select a view"}</Select.Trigger>
-				<Select.Content class="z-[99] max-h-[10rem]">
+				<Select.Content class="z-[99]">
 					{#each Object.values(views) as viewOption}
 						<Select.Item value={viewOption} label={viewOption}>{viewOption}</Select.Item>
 					{/each}
@@ -1131,7 +1138,7 @@
 				bind:value={activeKpiGroup}
 				onValueChange={loadKpiPlots}>
 				<Select.Trigger>{activeKpiGroup ?? "Select a KPI"}</Select.Trigger>
-				<Select.Content class="z-[99] max-h-[10rem]">
+				<Select.Content class="z-[99]">
 					{#each kpiGroups as kpiOption}
 						<Select.Item value={kpiOption} label={kpiOption}>{kpiOption}</Select.Item>
 					{/each}
@@ -1156,7 +1163,7 @@
 
 		<div class="field">
 			<Tabs.Root value="create" class="w-full" onValueChange={()=>scenarioTaskComplete=false}>
-				<Tabs.List>
+				<Tabs.List class="!w-full">
 					<Tabs.Trigger value="create">Create</Tabs.Trigger>
 					<Tabs.Trigger value="load">Load</Tabs.Trigger>
 					<Tabs.Trigger value="delete">Delete</Tabs.Trigger>
@@ -1183,7 +1190,7 @@
 							bind:value={ephScenario}
 							onValueChange={()=>{if(ephScenario!=scenario)scenarioTaskComplete=false}}>
 							<Select.Trigger class="!flex-grow">{ephScenario ?? "Select a scenario"}</Select.Trigger>
-							<Select.Content class="z-[99] max-h-[16rem]">
+							<Select.Content class="z-[99]">
 								{#each Object.keys(scenarios) as scenarioOption}
 									<Select.Item value={scenarioOption} label={scenarioOption}>{scenarioOption}</Select.Item>
 								{/each}
@@ -1207,7 +1214,7 @@
 							bind:value={ephScenario}
 							onValueChange={()=>{scenarioTaskComplete=false}}>
 							<Select.Trigger class="!flex-grow w-full">{ephScenario ?? "Select a scenario"}</Select.Trigger>
-							<Select.Content class="z-[99] max-h-[16rem]">
+							<Select.Content class="z-[99]">
 								{#each Object.keys(scenarios) as scenarioOption}
 									<Select.Item value={scenarioOption} label={scenarioOption}>{scenarioOption}</Select.Item>
 								{/each}
@@ -1231,7 +1238,7 @@
 		<div class="flex flex-row align-center max-w-[80%] !pt-3">
 			<div class="flex flex-row gap-1 flex-shrink-1 !p-1 !bg-input rounded-l">
 				Active scenarios
-				<HugeiconsIcon icon={MoreVerticalIcon} size="16" onclick={()=>labToggle=true}/>
+				<HugeiconsIcon icon={MoreVerticalIcon} size="16" onclick={()=>goToLab('scenario')}/>
 			</div>
 			<div class="flex-grow-1 !p-1 overflow-x-auto !border !border-input rounded-r">{selectedScenarios.join(", ")}</div>
 		</div>
@@ -1404,7 +1411,7 @@ nav .nav-options-wrapper {
 	grid-area: display;
 	height: 100%;
 	width: 100%;
-	overflow: scroll;
+	overflow-y: auto;
 }
 .main-display-wrapper {
 	display: flex;

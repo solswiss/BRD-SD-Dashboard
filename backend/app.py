@@ -415,6 +415,7 @@ def sensitivity_analysis():
 
         elif mode == 'heatmap':
             # Extract X and Y parameters (both constant, both swept) and Z variable (stateful output)
+            # print('data=',data)
             var_keys = list(variables.keys())
             x_param = var_keys[0]
             y_param = var_keys[1] if len(var_keys) > 1 else None
@@ -428,6 +429,8 @@ def sensitivity_analysis():
 
             x_config = variables[x_param]
             y_config = variables[y_param]
+            # print('x conf',x_config)
+            # print('y conf',y_config)
             
             x_min = x_config.get('min', all_variables[x_param]['min'])
             x_max = x_config.get('max', all_variables[x_param]['max'])

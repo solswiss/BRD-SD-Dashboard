@@ -13,27 +13,20 @@ To isolate inputs for one domain, change `Domain` from the sidebar or click the 
 ### Installation & Running
 Complete the backend tasks before moving on to the frontend tasks. If you're unfamiliar with terminal commands, the directory instructions (e.g. `cd backend`) should be done from the root folder; you can open separate terminals or do `cd ..` to go back one folder. It's recommended that you create a virtual environment for the Python packages.
 #### Backend tasks
-0. Open folder `backend`
+1. Install the required packages for backend processes. Also optionally create and activate virtual environment (venv) for package installations prior to this step.
 ```
 cd backend
-```
-1. Install required packages
-```
 pip install -r requirements.txt
 ```
-2. Start the server
+2. Start the server. Ensure that the Flask server started successfully (e.g. terminal confirmation: `Running on http://127.0.0.1:5000`) before continuing.
 ```
 python app.py
 ```
-Ensure that the Flask server started successfully (e.g. terminal confirmation: `Running on http://127.0.0.1:5000`) before continuing.
 
 #### Frontend tasks
-0. Open folder `frontend`
+1. Install the required packages for backend processes.
 ```
 cd frontend
-```
-1. Install required packages
-```
 npm install
 ```
 2. Start the client
@@ -41,6 +34,7 @@ npm install
 npm run dev
 ```
 3. Open the dashboard: `ctrl-click` the link or go to `http://localhost:5173`
+
 ### Setup
 There is limited support for customization (see the hard-coded logo, for example, which may be addressed soon) but setting up a new model is very doable. If you have a PYSD model file, go to step 3.
 1. Add a `.mdl` file to folder `backend`
@@ -48,6 +42,7 @@ There is limited support for customization (see the hard-coded logo, for example
 ```python convert_model.py```
 3. Rename the generated `.py` file to `model.py`
 4. Update the `.json` files in folder `setup config`
+
 #### Helpful Tips
 - Reference `model.py` for the Python versions of variable names which are lowercase and camelcase (e.g. `Quarantine rate` --> `quarantine_rate`)
 - If a JSON file has an error, see if it uses the python or real variable name instead, if the format is incorrect, if you forgot to close a string (or brace!)

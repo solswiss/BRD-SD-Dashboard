@@ -87,7 +87,7 @@
 	let sensitivityZVariable = $state(null);
 	let sensitivityXRange = $state({ min: null, max: null });
 	let sensitivityYRange = $state({ min: null, max: null });
-	let sensitivityTime = $state(0)
+	let sensitivityTime = $state(0);
 	let sensitivityStep = $state(2);
 	let sensitivityResults = $state(null);
 	let sensitivityStatus = $state('idle'); // idle, running, done
@@ -148,7 +148,7 @@
 			const data = await fetchWithCache('/api/metadata');
 			statefulVariables = { ...data.statefuls };
 			constantVariables = { ...data.constants };
-			sensitivityTime = constantVariables['initial_time']
+			sensitivityTime = constantVariables['final_time'].default
 		} catch(err) {
 			errorMessage = "Could not load metadata.";
 			isInitializing = false;
@@ -649,6 +649,10 @@
 			yRange = validateAndNormalizeRange(sensitivityYRange.min, sensitivityYRange.max, yVarName);
 			if (!yRange) return null;
 			console.debug('time=',sensitivityTime)
+			if (!sensitivityXVariable || sensitivityXVariable === 'time') {
+				sensitivityXRange.min = constantVariables['initial_time'].default
+				sensitivityXRange.max = constantVariables['final_time'].default
+			}
 			return {
 				mode: 'heatmap',
 				variables: {
